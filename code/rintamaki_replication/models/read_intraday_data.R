@@ -1,7 +1,7 @@
 # Read data for the intraday models
 
 # read data for DK1
-data <- read.table(here("data/raw/rintamaki_replication/data/dk1_intraday.txt"), header=TRUE)
+data <- read.table(here("code/rintamaki_replication/data/dk1_intraday.txt"), header=TRUE)
 dates_dk1 <- data$date # observation dates
 dates_dk1 <- as.Date(dates_dk1,"%d/%m/%Y") # format to R dates. This can be used for plotting
 price_op1_dk1 <- data$op1_dk1_price # logarithm of the average DK1 price during the off-peak 1 hours. In the paper, we denote the variable by 'p'.
@@ -21,7 +21,7 @@ exim_op2_dk1 <- data$op2_dk1_exp # average spot market exports/imports at DK1 du
 exim_p_dk1 <- data$p_dk1_exp # average spot market exports/imports at DK1 during peak hours (in GW)
 
 # read data for DK2
-data <- read.table(here("data/raw/rintamaki_replication/data/dk2_intraday.txt"), header=TRUE)
+data <- read.table(here("code/rintamaki_replication/data/dk2_intraday.txt"), header=TRUE)
 dates_dk2 <- data$date # observation dates
 dates_dk2 <- as.Date(dates_dk2,"%d/%m/%Y") # format to R dates
 price_op1_dk2 <- data$op1_dk2_price # logarithm of the average DK2 price during the off-peak 1 hours
@@ -41,7 +41,7 @@ exim_op2_dk2 <- data$op2_dk2_exp # average spot market exports/imports at DK2 du
 exim_p_dk2 <- data$p_dk2_exp # average spot market exports/imports at DK2 during peak hours
 
 # read data for DE
-data <- read.table(here("data/raw/rintamaki_replication/data/de_intraday.txt"), header=TRUE)
+data <- read.table(here("code/rintamaki_replication/data/de_intraday.txt"), header=TRUE)
 dates_de <- data$date
 dates_de <- as.Date(dates_de,"%d/%m/%Y")
 price_op1_de <- data$op1_price # logarithm of the average DE price during the off-peak 1 hours

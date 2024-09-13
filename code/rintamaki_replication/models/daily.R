@@ -1,5 +1,5 @@
 # CHANGE THE WORKING DIRECTORY!
-working_directory = here("data/raw/rintamaki_replication/") 
+working_directory = here("code/rintamaki_replication/") 
 setwd(working_directory)
 
 # import the required libraries

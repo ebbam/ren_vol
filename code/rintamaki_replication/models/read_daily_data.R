@@ -1,7 +1,7 @@
 # Read data for the daily models
 
 # read data for DK1
-data <- read.table(here('data/raw/rintamaki_replication/data/dk1_daily.txt'), header=TRUE) # read the whole data file
+data <- read.table(here('code/rintamaki_replication/data/dk1_daily.txt'), header=TRUE) # read the whole data file
 dates_dk1 <- data$date # observation dates
 dates_dk1 <- as.Date(dates_dk1,"%d/%m/%Y") # format to R dates. These may be used for plotting
 vol_dk1 <- data$dk1_price_vol # the logarithm of DK1 daily price volatility. In the paper, we use the letter v to denote volatility
@@ -14,7 +14,7 @@ exim_p_dk1 <- data$dk1_p_exim # average DK1 spot market exchange during the peak
 gas_dk1 <- data$dk1_gas # the logarithm of daily NCG spot gas prices
 
 # read data for DK2
-data <- read.table(here('data/raw/rintamaki_replication/data/dk2_daily.txt'), header=TRUE)
+data <- read.table(here('code/rintamaki_replication/data/dk2_daily.txt'), header=TRUE)
 dates_dk2 <- data$date 
 dates_dk2 <- as.Date(dates_dk2,"%d/%m/%Y")
 vol_dk2 <- data$dk2_price_vol # the logarithm of DK2 daily price volatility
@@ -27,7 +27,7 @@ exim_p_dk2 <- data$dk2_p_exim # average DK2 spot market exchange during the peak
 gas_dk2 <- data$dk2_gas # the logarithm of daily NCG spot gas prices
 
 # read data for DE
-data <- read.table(here('data/raw/rintamaki_replication/data/de_daily.txt'), header=TRUE)
+data <- read.table(here('code/rintamaki_replication/data/de_daily.txt'), header=TRUE)
 dates_de <- data$date
 dates_de <- as.Date(dates_de,"%d/%m/%Y")
 vol_de <- data$de_price_vol # the logarithm of DE daily price volatility

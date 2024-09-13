@@ -4,8 +4,17 @@ author: "Ebba Mark"
 date: "`r Sys.Date()`"
 output:
   html_document: default
-  word_document: default
 ---
+
+
+```{css, echo=FALSE}
+pre {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+```
+
 
 ```{r setup, include=FALSE}
 library(tidyverse)
@@ -19,7 +28,7 @@ conflict_prefer_all("gets", quiet = TRUE)
 conflicts_prefer(dplyr::filter)
 knitr::opts_chunk$set(echo = TRUE)
 
-source(here("data/raw/rintamaki_replication/models/helper_code.R"))
+source(here("code/rintamaki_replication/models/helper_code.R"))
 
 ```
 
@@ -36,8 +45,8 @@ Pulled from replication data available at: <https://doi-org.ezproxy-prd.bodleian
 
 ```{r, cache = TRUE}
 
-# Required including "here("data/raw/rintamaki_replication/data/" to data read commands in the listed files 
-source(here("data/raw/rintamaki_replication/models/read_daily_data.R"))
+# Required including "here("code/rintamaki_replication/data/" to data read commands in the listed files 
+source(here("code/rintamaki_replication/models/read_daily_data.R"))
 
 ```
 
@@ -85,7 +94,7 @@ This is where we have our current comparative advantage in that we can model hou
 
 # Loads hourly price data for de, dk1, dk2
 for(cty in c('dk1', 'dk2', 'de')){
-  temp <- read_xlsx(here('data/raw/rintamaki_replication/data/raw_data.xlsx'), sheet = cty) %>% 
+  temp <- read_xlsx(here('code/rintamaki_replication/data/raw_data.xlsx'), sheet = cty) %>% 
     clean_names
   assign(paste0("data_", cty), temp)
 }
@@ -177,7 +186,7 @@ dk2_vmod %>% plot
 ```
 
 
-## Replicate Weekly
+## Replicate Weekly 
 
 ### Data
 
@@ -185,8 +194,8 @@ Pulled from replication data available at:<https://doi-org.ezproxy-prd.bodleian.
 
 ```{r, cache = TRUE}
 
-# Required including "here("data/raw/rintamaki_replication/data/" to data read commands in the listed files
-source(here("data/raw/rintamaki_replication/models/read_weekly_data.R"))
+# Required including "here("code/rintamaki_replication/data/" to data read commands in the listed files
+source(here("code/rintamaki_replication/models/read_weekly_data.R"))
 
 ```
 
@@ -215,12 +224,14 @@ weekly_res %>%
 
 ```
 
-### Daily price volatility model with gets
+### Daily price volatility model with gets {.tabset}
+
+#### Data
 
 ```{r, cache = TRUE}
 
 for(cty in c('dk1', 'dk2', 'de')){
-  temp <- read_xlsx(here('data/raw/rintamaki_replication/data/raw_data.xlsx'), sheet = cty) %>%
+  temp <- read_xlsx(here('code/rintamaki_replication/data/raw_data.xlsx'), sheet = cty) %>%
     clean_names
   assign(paste0("data_", cty), temp)
 }
@@ -338,8 +349,8 @@ Pulled from replication data available at:<https://doi-org.ezproxy-prd.bodleian.
 
 ```{r, cache = TRUE}
 
-# Required including "here("data/raw/rintamaki_replication/data/" to data read commands in the listed files 
-source(here("data/raw/rintamaki_replication/models/read_intraday_data.R"))
+# Required including "here("code/rintamaki_replication/data/" to data read commands in the listed files 
+source(here("code/rintamaki_replication/models/read_intraday_data.R"))
 
 ```
 
@@ -365,12 +376,14 @@ modelsummary(intraday_res)
 
 ```
 
-### Intraday price model with gets
+### Intraday price model with gets  {.tabset}
+
+#### Data
 
 ```{r, cache = TRUE}
 
 for(cty in c("de","dk1", "dk2")){
-  temp <- read.table(here(paste0("data/raw/rintamaki_replication/data/", cty, "_intraday.txt")), header=TRUE) %>% 
+  temp <- read.table(here(paste0("code/rintamaki_replication/data/", cty, "_intraday.txt")), header=TRUE) %>% 
   tibble %>% 
   mutate(date = dmy(date)) %>% 
   arrange(date)
