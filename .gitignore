@@ -7,3 +7,6 @@ data/raw/.DS_Store
 data/raw/Energy Prices/.DS_Store
 .DS_Store
 data/raw/rintamaki_replication/rintamaki_replication_files/
+/data/raw/rintamaki_replication/rintamaki_replication_cache
+/code/rintamaki_replication/rintamaki_replication_cache
+/code/rintamaki_replication/rintamaki_replication_files
