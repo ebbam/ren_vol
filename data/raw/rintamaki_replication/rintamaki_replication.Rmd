@@ -1,0 +1,492 @@
+---
+title: "Rintamaki Replication"
+author: "Ebba Mark"
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(here)
+library(gets)
+library(readxl)
+library(janitor)
+library(conflicted)
+library(modelsummary)
+conflict_prefer_all("gets", quiet = TRUE)
+conflicts_prefer(dplyr::filter)
+knitr::opts_chunk$set(echo = TRUE)
+
+source(here("data/raw/rintamaki_replication/models/helper_code.R"))
+
+```
+
+# Replication {.tabset}
+In the specification looking at daily price volatility the dependent variable of interest is the standard deviation of hourly prices per day. We have the advantage of being able to model the volatility of hourly prices directly with gets.
+
+## Replicate Daily 
+
+### Models as in Rintamäki et al.
+
+The below specifications replicate the results reported in Rintamaki et al for daily price volatility. Unfortunately, gas spot prices are not provided in their replication data as they are proprietary (available via Bloomberg portal) - those specs have been commented out below.
+
+Pulled from replication data available at: <https://doi-org.ezproxy-prd.bodleian.ox.ac.uk/10.1016/j.eneco.2016.12.019>
+
+```{r, cache = TRUE}
+
+# Required including "here("data/raw/rintamaki_replication/data/" to data read commands in the listed files 
+source(here("data/raw/rintamaki_replication/models/read_daily_data.R"))
+
+```
+
+
+```{r, cache = TRUE}
+
+daily_forms <- list(
+  # SPECS FOR DK1
+  list(vol_dk1, wind_dk1, 2, 1, 2, 1, 7),
+  list(vol_dk1, wind_pen_dk1, 2, 1, 2, 1, 7),
+  list(vol_dk1, cbind(wind_dk1, exim_op1_dk1, exim_op2_dk1, exim_p_dk1), 2, 1, 2, 1, 7),
+  list(vol_dk1, cbind(wind_dk1, exim_op1_dk1, exim_p_dk1), 2, 1, 2, 1, 7),
+  list(vol_dk1, cbind(wind_pen_dk1, exim_op1_dk1, exim_p_dk1), 2, 1, 2, 1, 7),
+  #list(fwd1(vol_dk1), list(fwd1(wind_dk1), diff(gas_dk1))),
+  #SPECS FOR DK2
+  list(vol_dk2, wind_dk2, 2, 1, 2, 1, 7),
+  list(vol_dk2, wind_pen_dk2, 2, 1, 2, 1, 7),
+  list(vol_dk2, cbind(wind_dk2, exim_op1_dk2, exim_op2_dk2, exim_p_dk2), 2, 1, 2, 1, 7),
+  list(vol_dk2, cbind(wind_dk2, exim_op1_dk2, exim_p_dk2), 2, 1, 2, 1, 7),
+  list(vol_dk2, cbind(wind_pen_dk2, exim_op1_dk2, exim_p_dk2), 2, 1, 2, 1, 7),
+  #list(fwd1(vol_dk2), list(fwd1(wind_dk2), diff(gas_dk2))),
+  # SPECS FOR DE
+  list(vol_de, wind_de, 2, 1, 2, 1, 7),
+  list(fwd1(vol_de), diff(solar_de), 2, 1, 2, 1, 7),
+  list(fwd1(vol_de), cbind(fwd1(wind_de), diff(solar_de)), 2, 1, 2, 1, 7),
+  list(vol_de, res_de, 2, 1, 2, 1, 7),
+  list(vol_de, wind_pen_de, 2, 1, 2, 1, 7),
+  list(fwd1(vol_de), diff(solar_pen_de), 2, 1, 2, 1, 7),
+  list(vol_de, res_pen_de, 2, 1, 2, 1, 7),
+  list(fwd1(vol_de), cbind(fwd1(wind_de), diff(solar_de), fwd1(exim_op1_de), fwd1(exim_op2_de), fwd1(exim_p_de)), 2, 1, 2, 1, 7))
+  #list(fwd1(vol_de), list(fwd1(wind_de), diff(solar_de), diff(gas_de))))
+
+daily_res <- lapply(daily_forms, function(x) do.call(fitModel, x))
+
+daily_res %>% 
+  modelsummary
+
+
+```
+
+### Hourly price volatility model with gets {.tabset}
+This is where we have our current comparative advantage in that we can model hourly price volatility directly.
+
+```{r, cache = TRUE}
+
+# Loads hourly price data for de, dk1, dk2
+for(cty in c('dk1', 'dk2', 'de')){
+  temp <- read_xlsx(here('data/raw/rintamaki_replication/data/raw_data.xlsx'), sheet = cty) %>% 
+    clean_names
+  assign(paste0("data_", cty), temp)
+}
+
+```
+
+#### Germany
+
+```{r, cache = TRUE}
+
+data_de %>% 
+  ggplot(aes(x = date, y = de_price)) +
+  geom_line() +
+  labs(title = "Germany: Hourly Electricity Prices", y = "Hourly Electricity Price", x = "Date")
+
+# Check to make sure data is ordered
+data_de %>% arrange(date, hour) %>% identical(data_de)
+
+# The below model incorporates ARCH(24) to be selected over, available regressors for wind forecasts, solar forecasts, and imports to and from France. In line with Rintamaki et al, we incorporate moving average terms for half-day, daily, and weekly prices volatility (levels?). Seasonal moving average terms are not yet incorporated here as they are in Rintamaki et al. Rather we might want to consider the seasonal moving average to have a periodicity of 24 hours (moving average over the same time of day)
+de_mod <- arx(data_de$de_price, 
+              # Include 24 ARCH terms to be selected over
+              # Question: In theory, the ARCH(24) would proxy the seasonal (daily) AR term?
+              arch = 1:24, 
+              # Additional regressors to select over (only wind forecasts, solar forecasts, and imports between Germany and France are available at hourly frequency in the replication data)
+              # Worth doing additional data scoping
+              # Also perhaps worth including additional indicators for time of day (assuming this variation is not mopped up by the moving average terms)
+              vxreg = as.matrix(data_de[c('de_wind_fcast', 'de_solar_fcast', 'de_fr', 'fr_de')]), 
+              # As in Rintamaki et al. the below line incorporates moving average terms for the half-day (12), day (24 hours) and week (168 hours) 
+              log.ewma = c(12, 24, 168)) 
+
+
+# Perform gets model selection over the log-variance model above
+# Turn of ARCH diagnostics as the GUM does not pass (could possible manipulate lag and p value choice here)
+de_vmod <- getsv(de_mod, t.pval = 0.001, ar.LjungB = NULL)
+
+de_vmod %>% plot
+
+```
+
+#### DK1
+
+```{r, cache = TRUE}
+
+data_dk1 %>% 
+  ggplot(aes(x = date, y = dk1_price)) +
+  geom_line() +
+  labs(main = "DK1: Hourly Electricity Prices")
+
+data_dk1 %>% arrange(date, hour) %>% identical(data_dk1)
+
+# Same spec as above with appropriate corrections to the regressors
+dk1_mod <- arx(data_dk1$dk1_price, 
+              arch = 1:24, 
+              vxreg = as.matrix(data_dk1[c("dk1_load_fcast", "dk1_wind_fcast", "dk1_no2", "no2_dk1", "dk1_se3", "se3_dk1")]),
+               log.ewma = c(12, 24, 168)) 
+
+
+# Perform gets model selection over the log-variance model above
+dk1_vmod <- getsv(dk1_mod, t.pval = 0.001, ar.LjungB = NULL)
+
+dk1_vmod %>% plot
+
+```
+
+#### DK2
+
+```{r, cache = TRUE}
+
+data_dk2 %>% 
+  ggplot(aes(x = date, y = dk2_price)) +
+  geom_line() +
+  labs(main = "DK2: Hourly Electricity Prices")
+
+data_dk2 %>% arrange(date, hour) %>% identical(data_dk2)
+
+# Same spec as above with appropriate corrections to the regressors
+dk2_mod <- arx(data_dk2$dk2_price, 
+              arch = 1:24, 
+              vxreg = as.matrix(data_dk2[c("dk2_load_fcast", "dk2_wind_fcast", 
+                                 "dk2_se4","dk2_se4_2")]),
+               log.ewma = c(12, 24, 168)) 
+
+
+# Perform gets model selection over the log-variance model above
+dk2_vmod <- getsv(dk2_mod, t.pval = 0.001, ar.LjungB = NULL)
+
+dk2_vmod %>% plot
+
+```
+
+
+## Replicate Weekly
+
+### Data
+
+Pulled from replication data available at:<https://doi-org.ezproxy-prd.bodleian.ox.ac.uk/10.1016/j.eneco.2016.12.019>
+
+```{r, cache = TRUE}
+
+# Required including "here("data/raw/rintamaki_replication/data/" to data read commands in the listed files
+source(here("data/raw/rintamaki_replication/models/read_weekly_data.R"))
+
+```
+
+### Models as in Rintamäki et al.
+```{r, cache = TRUE}
+
+weekly_forms <- list(
+  # SPECS FOR DK1
+  list(vol_dk1, wind_dk1, 1, 0, 0, 1, 4),
+  list(fwd1(vol_dk1), cbind(fwd1(wind_dk1), diff(exim_dk1)), 1, 0, 0, 1, 4),
+  list(vol_dk1, wind_std_dk1, 1, 0, 0, 1, 4),
+  # SPECS FOR DK2
+  list(vol_dk2, wind_dk2, 1, 0, 0, 1, 4),
+  list(vol_dk2, wind_std_dk2, 1, 0, 0, 1, 4),
+  # SPECS FOR DE
+  list(fwd1(vol_de), diff(wind_de), 1, 0, 0, 0, 4),
+  list(fwd1(vol_de), diff(solar_de), 1, 0, 0, 0, 4),
+  list(vol_de, res_de, 1, 0, 0, 0, 4),
+  list(fwd1(vol_de), cbind(diff(wind_de), fwd1(exim_de)), 1, 0, 0, 0, 4))
+
+weekly_res <- lapply(weekly_forms, function(x) do.call(fitModel, x))
+
+weekly_res %>%
+  modelsummary
+
+
+```
+
+### Daily price volatility model with gets
+
+```{r, cache = TRUE}
+
+for(cty in c('dk1', 'dk2', 'de')){
+  temp <- read_xlsx(here('data/raw/rintamaki_replication/data/raw_data.xlsx'), sheet = cty) %>%
+    clean_names
+  assign(paste0("data_", cty), temp)
+}
+
+df_list <- list("data_de" = data_de, "data_dk1" = data_dk1, "data_dk2" = data_dk2)
+
+for(n_df in names(df_list)){
+  df <- df_list[[n_df]]
+  temp <- df %>%
+    tibble %>%
+    # Certain days in October have multiple values for hour one across all countries...not sure why.
+    # Below I take the average of the duplicate observations but might be worth looking into why this is the case
+    group_by(date, hour) %>%
+    summarise(across(names(df)[!(names(df) %in% c("date", "hour", "month"))], ~mean(., na.rm = TRUE))) %>%
+    # Daily average price
+    group_by(date) %>%
+    select(-c("hour")) %>%
+    summarise(across(names(df)[!(names(df) %in% c("date", "hour", "month"))], ~mean(., na.rm = TRUE)))
+
+   assign(paste0("daily_", n_df), temp)
+}
+
+```
+
+#### Germany
+
+```{r, cache = TRUE}
+
+daily_data_de %>%
+  ggplot(aes(x = date, y = de_price)) +
+  geom_line() +
+  labs(main = "Germany: Daily Electricity Prices")
+
+daily_data_de %>% arrange(date) %>% identical(daily_data_de)
+
+# equally-weighted moving averages are incorporated to account for daily moving averages (24 hours) and weekly moving averages (24 hours * 7 days)
+
+# Might want to consider re-incorporating the seasonality dimension as well
+daily_de_mod <- arx(daily_data_de$de_price,
+              # Include 24 ARCH terms to be selected over
+              # in theory, the ARHC(24) would proxy the seasonal AR term?
+              arch = 1:24,
+              # Additional regressors to select over (only wind forecasts, solar forecasts, and imports between Germany and France are available at hourly frequency in the replication data
+              # Worth doing additional data scoping
+              # Also perhaps worth including additional indicators for time of day (assuming this variation is not mopped up by the moving average terms)
+              vxreg = as.matrix(daily_data_de[c('de_load_fcast', 'de_wind_fcast', 'de_solar_fcast', 'de_fr', 'fr_de')]),
+              # As in Rintamaki et al. the below line incorporates moving average terms for the half-day (12), day (24 hours) and week (168 hours)
+              log.ewma = c(12, 24, 168))
+# Seasonal moving average terms are not yet incorporated here as they are in Rintamaki et al. Rather we might want to consider the seasonal moving average to have a periodicity of 24 hours (moving average over the same time of day)
+
+# Perform gets model selection over the log-variance model above
+daily_de_vmod <- getsv(daily_de_mod, t.pval = 0.001, ar.LjungB = NULL)
+
+daily_de_vmod %>% plot
+
+```
+
+#### DK1
+
+```{r, cache = TRUE}
+
+daily_data_dk1 %>%
+  ggplot(aes(x = date, y = dk1_price)) +
+  geom_line() +
+  labs(main = "DK1: Daily Electricity Prices")
+
+daily_data_dk1 %>% arrange(date) %>% identical(daily_data_dk1)
+
+# Same spec as above with appropriate corrections to the regressors
+daily_dk1_mod <- arx(daily_data_dk1$dk1_price,
+              mc = TRUE,
+              arch = 1:24,
+              vxreg = as.matrix(daily_data_dk1[c("dk1_load_fcast", "dk1_wind_fcast", "dk1_no2", "no2_dk1", "dk1_se3", "se3_dk1")]),
+               log.ewma = c(12, 24, 168))
+
+
+# Perform gets model selection over the log-variance model above
+daily_dk1_vmod <- getsv(daily_dk1_mod, t.pval = 0.001, ar.LjungB = NULL)
+
+daily_dk1_vmod %>% plot
+
+```
+
+#### DK2
+
+```{r, cache = TRUE}
+
+daily_data_dk2 %>%
+  ggplot(aes(x = date, y = dk2_price)) +
+  geom_line() +
+  labs(main = "DK2: Daily Electricity Prices")
+
+data_dk2 %>% arrange(date) %>% identical(data_dk2)
+
+# Same spec as above with appropriate corrections to the regressors
+daily_dk2_mod <- arx(daily_data_dk2$dk2_price,
+              arch = 1:24,
+              vxreg = as.matrix(daily_data_dk2[c("dk2_load_fcast", "dk2_wind_fcast",
+                                 "dk2_se4","dk2_se4_2")]),
+               log.ewma = c(12, 24, 168))
+
+
+# Perform gets model selection over the log-variance model above
+# Requires turning off both ARCH and AR Ljung-Box test - could play around with lag and pvalues
+daily_dk2_vmod <- getsv(daily_dk2_mod, t.pval = 0.001, ar.LjungB = NULL, arch.LjungB = NULL)
+
+daily_dk2_vmod %>% plot
+
+```
+
+
+## Replicate Intraday
+
+Pulled from replication data available at:<https://doi-org.ezproxy-prd.bodleian.ox.ac.uk/10.1016/j.eneco.2016.12.019>
+
+```{r, cache = TRUE}
+
+# Required including "here("data/raw/rintamaki_replication/data/" to data read commands in the listed files 
+source(here("data/raw/rintamaki_replication/models/read_intraday_data.R"))
+
+```
+
+### Models as in Rintamäki et al.
+```{r, cache = TRUE}
+
+intraday_forms <- list(
+  list(price_op1_dk1, cbind(wind_op1_dk1, exim_op1_dk1), 2, 1, 1, 1, 7),
+  list(price_p_dk1, cbind(wind_p_dk1, exim_p_dk1), 2, 1, 1, 1, 7),
+  list(price_op2_dk1, cbind(wind_op2_dk1, exim_op2_dk1), 2, 1, 1, 1, 7),
+  list(price_p_dk2, cbind(wind_p_dk2, exim_p_dk2),  2, 1, 1, 1, 7),
+  list(price_op2_dk2, cbind(wind_op2_dk2, exim_op2_dk2),  2, 1, 1, 1, 7),
+  list(price_op1_de, cbind(wind_op1_de, exim_op1_de),  2, 1, 1, 1, 7),
+  list(price_p_de, cbind(wind_p_de, exim_p_de), 2, 1, 1, 1, 7),
+  list(price_op2_de, cbind(wind_op2_de, exim_op2_de),  2, 1, 1, 1, 7),
+  list(fwd1(price_p_de), cbind(diff(solar_p_de), fwd1(exim_p_de)),  2, 1, 1, 1, 7), 
+  list(price_p_de, cbind(res_p_de, exim_p_de), 2, 1, 1, 1, 7))
+
+
+intraday_res <- lapply(intraday_forms, function(x) do.call(fitModel, x))
+
+modelsummary(intraday_res)
+
+```
+
+### Intraday price model with gets
+
+```{r, cache = TRUE}
+
+for(cty in c("de","dk1", "dk2")){
+  temp <- read.table(here(paste0("data/raw/rintamaki_replication/data/", cty, "_intraday.txt")), header=TRUE) %>% 
+  tibble %>% 
+  mutate(date = dmy(date)) %>% 
+  arrange(date)
+  
+  assign(paste0("intraday_data_", cty), temp)
+}
+```
+
+#### Germany
+
+```{r, cache = TRUE}
+
+intraday_data_de %>% 
+  select(date, op1_price, op2_price, p_price) %>% 
+  pivot_longer(cols = !date) %>% 
+  ggplot() +
+  geom_line(aes(x = date, y = value, color = name)) +
+  labs(main = "DE: Intraday Electricity Prices")
+
+intraday_data_de %>% arrange(date) %>% identical(intraday_data_de)
+
+for(dep in c("op1_", "op2_", "p_")){
+  temp <- intraday_data_de %>% 
+    select(date, contains(dep))
+  print(temp)
+  
+  dep2 <- as.matrix(temp[paste0(dep, "price")])
+  vxregs <- as.matrix(temp[!(names(temp) %in% c("date", paste0(dep, "price")))])
+
+  temp_mod <- arx(dep2, 
+              ar = 1:7, 
+              vxreg = vxregs,
+              log.ewma = c(12, 24, 168)) 
+  assign(paste0("de_", dep, "mod"), temp_mod)
+  
+  temp_vmod <- getsv(temp_mod, t.pval = 0.001, ar.LjungB = NULL, arch.LjungB = NULL)
+  assign(paste0("de_", dep, "vmod"), temp_vmod)
+
+  plot(temp_vmod)
+  
+}
+
+```
+
+#### DK1
+
+```{r, cache = TRUE}
+
+intraday_data_dk1 %>% 
+  select(date, op1_dk1_price, op2_dk1_price, p_dk1_price) %>% 
+  pivot_longer(cols = !date) %>% 
+  ggplot() +
+  geom_line(aes(x = date, y = value, color = name)) +
+  labs(main = "DK1: Intraday Electricity Prices")
+
+intraday_data_dk1 %>% arrange(date) %>% identical(intraday_data_dk1)
+
+for(dep in c("op1_dk1_", "op2_dk1_", "p_dk1_")){
+  temp <- intraday_data_dk1 %>% 
+    select(date, contains(dep))
+  print(temp)
+  
+  dep2 <- as.matrix(temp[paste0(dep, "price")])
+  vxregs <- as.matrix(temp[!(names(temp) %in% c("date", paste0(dep, "price")))])
+
+  temp_mod <- arx(dep2, 
+              arch = 1:24, 
+              vxreg = vxregs,
+              log.ewma = c(12, 24, 168)) 
+  assign(paste0("dk1_", dep, "mod"), temp_mod)
+  
+  temp_vmod <- getsv(temp_mod, t.pval = 0.001, ar.LjungB = NULL, arch.LjungB = NULL)
+  assign(paste0("dk1_", dep, "vmod"), temp_vmod)
+
+  plot(temp_vmod)
+  
+}
+
+```
+
+#### DK2
+
+```{r, cache = TRUE}
+
+intraday_data_dk2 %>% 
+  select(date, op1_dk2_price, op2_dk2_price, p_dk2_price) %>% 
+  pivot_longer(cols = !date) %>% 
+  ggplot() +
+  geom_line(aes(x = date, y = value, color = name)) +
+  labs(main = "dk2: Intraday Electricity Prices")
+
+intraday_data_dk2 %>% arrange(date) %>% identical(intraday_data_dk2)
+
+for(dep in c("op1_dk2_", "op2_dk2_", "p_dk2_")){
+  temp <- intraday_data_dk2 %>% 
+    select(date, contains(dep))
+  print(temp)
+  
+  dep2 <- as.matrix(temp[paste0(dep, "price")])
+  vxregs <- as.matrix(temp[!(names(temp) %in% c("date", paste0(dep, "price")))])
+
+  temp_mod <- arx(dep2, 
+              arch = 1:24, 
+              vxreg = vxregs,
+              log.ewma = c(12, 24, 168)) 
+  assign(paste0("dk2_", dep, "mod"), temp_mod)
+  
+  temp_vmod <- getsv(temp_mod, t.pval = 0.001, ar.LjungB = NULL, arch.LjungB = NULL)
+  assign(paste0("dk2_", dep, "vmod"), temp_vmod)
+
+  printtex(temp_vmod)
+  plot(temp_vmod)
+  
+}
+
+
+```
+
+
