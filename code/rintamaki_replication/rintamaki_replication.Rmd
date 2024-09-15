@@ -90,6 +90,8 @@ daily_res %>%
 ### Hourly price volatility model with gets {.tabset}
 This is where we have our current comparative advantage in that we can model hourly price volatility directly.
 
+#### Data
+
 ```{r, cache = TRUE}
 
 # Loads hourly price data for de, dk1, dk2
