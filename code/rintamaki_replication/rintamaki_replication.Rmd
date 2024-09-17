@@ -33,9 +33,9 @@ source(here("code/rintamaki_replication/models/helper_code.R"))
 ```
 
 # Replication {.tabset}
-In the specification looking at daily price volatility the dependent variable of interest is the standard deviation of hourly prices per day. We have the advantage of being able to model the volatility of hourly prices directly with gets.
 
 ## Replicate Daily 
+In the specification looking at daily price volatility the dependent variable of interest is the standard deviation of hourly prices per day. We have the advantage of being able to model the volatility of hourly prices directly with gets.
 
 ### Models as in Rintamäki et al.
 
@@ -109,7 +109,7 @@ for(cty in c('dk1', 'dk2', 'de')){
 
 data_de %>% 
   ggplot(aes(x = date, y = de_price)) +
-  geom_line() +
+  geom_line(linewidth = 0.1) +
   labs(title = "Germany: Hourly Electricity Prices", y = "Hourly Electricity Price", x = "Date")
 
 # Check to make sure data is ordered
@@ -142,7 +142,7 @@ de_vmod %>% plot
 
 data_dk1 %>% 
   ggplot(aes(x = date, y = dk1_price)) +
-  geom_line() +
+  geom_line(linewidth = 0.1) +
   labs(main = "DK1: Hourly Electricity Prices")
 
 data_dk1 %>% arrange(date, hour) %>% identical(data_dk1)
@@ -167,7 +167,7 @@ dk1_vmod %>% plot
 
 data_dk2 %>% 
   ggplot(aes(x = date, y = dk2_price)) +
-  geom_line() +
+  geom_line(linewidth = 0.1) +
   labs(main = "DK2: Hourly Electricity Prices")
 
 data_dk2 %>% arrange(date, hour) %>% identical(data_dk2)
@@ -189,6 +189,8 @@ dk2_vmod %>% plot
 
 
 ## Replicate Weekly 
+
+Again, in the specification looking at weekly price volatility the dependent variable of interest is the standard deviation of daily prices per week. We have the advantage of being able to model the volatility of daily prices directly with gets.
 
 ### Data
 
@@ -264,25 +266,25 @@ for(n_df in names(df_list)){
 
 daily_data_de %>%
   ggplot(aes(x = date, y = de_price)) +
-  geom_line() +
+  geom_line(linewidth = 0.1) +
   labs(main = "Germany: Daily Electricity Prices")
 
 daily_data_de %>% arrange(date) %>% identical(daily_data_de)
 
-# equally-weighted moving averages are incorporated to account for daily moving averages (24 hours) and weekly moving averages (24 hours * 7 days)
+# equally-weighted moving averages are incorporated to account for multi-day moving averages 2-, 5-, 7-, 14-day moving averages
 
 # Might want to consider re-incorporating the seasonality dimension as well
 daily_de_mod <- arx(daily_data_de$de_price,
-              # Include 24 ARCH terms to be selected over
-              # in theory, the ARHC(24) would proxy the seasonal AR term?
-              arch = 1:24,
+              # Include 14 ARCH terms to be selected over (two-week period)
+              # in theory, the ARHC(14) would proxy the seasonal AR term?
+              arch = 1:14,
               # Additional regressors to select over (only wind forecasts, solar forecasts, and imports between Germany and France are available at hourly frequency in the replication data
               # Worth doing additional data scoping
               # Also perhaps worth including additional indicators for time of day (assuming this variation is not mopped up by the moving average terms)
               vxreg = as.matrix(daily_data_de[c('de_load_fcast', 'de_wind_fcast', 'de_solar_fcast', 'de_fr', 'fr_de')]),
-              # As in Rintamaki et al. the below line incorporates moving average terms for the half-day (12), day (24 hours) and week (168 hours)
-              log.ewma = c(12, 24, 168))
-# Seasonal moving average terms are not yet incorporated here as they are in Rintamaki et al. Rather we might want to consider the seasonal moving average to have a periodicity of 24 hours (moving average over the same time of day)
+              # As in Rintamaki et al. the below line incorporates moving average terms for the two-day, 5-day, one-week, and two-week prices
+              log.ewma = c(2, 5, 7, 14))
+# Seasonal moving average terms are not yet incorporated here as they are in Rintamaki et al. Rather we might want to consider the seasonal moving average to have a periodicity of X hours (moving average over the same time of day)
 
 # Perform gets model selection over the log-variance model above
 daily_de_vmod <- getsv(daily_de_mod, t.pval = 0.001, ar.LjungB = NULL)
@@ -297,7 +299,7 @@ daily_de_vmod %>% plot
 
 daily_data_dk1 %>%
   ggplot(aes(x = date, y = dk1_price)) +
-  geom_line() +
+  geom_line(linewidth = 0.1) +
   labs(main = "DK1: Daily Electricity Prices")
 
 daily_data_dk1 %>% arrange(date) %>% identical(daily_data_dk1)
@@ -305,9 +307,9 @@ daily_data_dk1 %>% arrange(date) %>% identical(daily_data_dk1)
 # Same spec as above with appropriate corrections to the regressors
 daily_dk1_mod <- arx(daily_data_dk1$dk1_price,
               mc = TRUE,
-              arch = 1:24,
+              arch = 1:14,
               vxreg = as.matrix(daily_data_dk1[c("dk1_load_fcast", "dk1_wind_fcast", "dk1_no2", "no2_dk1", "dk1_se3", "se3_dk1")]),
-               log.ewma = c(12, 24, 168))
+               log.ewma = c(2, 5, 7, 14))
 
 
 # Perform gets model selection over the log-variance model above
@@ -323,17 +325,17 @@ daily_dk1_vmod %>% plot
 
 daily_data_dk2 %>%
   ggplot(aes(x = date, y = dk2_price)) +
-  geom_line() +
+  geom_line(linewidth = 0.1) +
   labs(main = "DK2: Daily Electricity Prices")
 
 data_dk2 %>% arrange(date) %>% identical(data_dk2)
 
 # Same spec as above with appropriate corrections to the regressors
 daily_dk2_mod <- arx(daily_data_dk2$dk2_price,
-              arch = 1:24,
+              arch = 1:14,
               vxreg = as.matrix(daily_data_dk2[c("dk2_load_fcast", "dk2_wind_fcast",
                                  "dk2_se4","dk2_se4_2")]),
-               log.ewma = c(12, 24, 168))
+               log.ewma = c(2, 5, 7, 14))
 
 
 # Perform gets model selection over the log-variance model above
@@ -402,7 +404,7 @@ intraday_data_de %>%
   select(date, op1_price, op2_price, p_price) %>% 
   pivot_longer(cols = !date) %>% 
   ggplot() +
-  geom_line(aes(x = date, y = value, color = name)) +
+  geom_line(aes(x = date, y = value, color = name), linewidth = 0.1) +
   labs(main = "DE: Intraday Electricity Prices")
 
 intraday_data_de %>% arrange(date) %>% identical(intraday_data_de)
@@ -416,9 +418,9 @@ for(dep in c("op1_", "op2_", "p_")){
   vxregs <- as.matrix(temp[!(names(temp) %in% c("date", paste0(dep, "price")))])
 
   temp_mod <- arx(dep2, 
-              ar = 1:7, 
+              ar = 1:14, 
               vxreg = vxregs,
-              log.ewma = c(12, 24, 168)) 
+              log.ewma = c(2, 5, 7, 14)) 
   assign(paste0("de_", dep, "mod"), temp_mod)
   
   temp_vmod <- getsv(temp_mod, t.pval = 0.001, ar.LjungB = NULL, arch.LjungB = NULL)
@@ -438,7 +440,7 @@ intraday_data_dk1 %>%
   select(date, op1_dk1_price, op2_dk1_price, p_dk1_price) %>% 
   pivot_longer(cols = !date) %>% 
   ggplot() +
-  geom_line(aes(x = date, y = value, color = name)) +
+  geom_line(aes(x = date, y = value, color = name), linewidth = 0.1) +
   labs(main = "DK1: Intraday Electricity Prices")
 
 intraday_data_dk1 %>% arrange(date) %>% identical(intraday_data_dk1)
@@ -452,9 +454,9 @@ for(dep in c("op1_dk1_", "op2_dk1_", "p_dk1_")){
   vxregs <- as.matrix(temp[!(names(temp) %in% c("date", paste0(dep, "price")))])
 
   temp_mod <- arx(dep2, 
-              arch = 1:24, 
+              arch = 1:14, 
               vxreg = vxregs,
-              log.ewma = c(12, 24, 168)) 
+              log.ewma = c(2, 5, 7, 14)) 
   assign(paste0("dk1_", dep, "mod"), temp_mod)
   
   temp_vmod <- getsv(temp_mod, t.pval = 0.001, ar.LjungB = NULL, arch.LjungB = NULL)
@@ -474,7 +476,7 @@ intraday_data_dk2 %>%
   select(date, op1_dk2_price, op2_dk2_price, p_dk2_price) %>% 
   pivot_longer(cols = !date) %>% 
   ggplot() +
-  geom_line(aes(x = date, y = value, color = name)) +
+  geom_line(aes(x = date, y = value, color = name), linewidth = 0.1) +
   labs(main = "dk2: Intraday Electricity Prices")
 
 intraday_data_dk2 %>% arrange(date) %>% identical(intraday_data_dk2)
@@ -488,9 +490,9 @@ for(dep in c("op1_dk2_", "op2_dk2_", "p_dk2_")){
   vxregs <- as.matrix(temp[!(names(temp) %in% c("date", paste0(dep, "price")))])
 
   temp_mod <- arx(dep2, 
-              arch = 1:24, 
+              arch = 1:14, 
               vxreg = vxregs,
-              log.ewma = c(12, 24, 168)) 
+              log.ewma = c(2, 5, 7, 14)) 
   assign(paste0("dk2_", dep, "mod"), temp_mod)
   
   temp_vmod <- getsv(temp_mod, t.pval = 0.001, ar.LjungB = NULL, arch.LjungB = NULL)
