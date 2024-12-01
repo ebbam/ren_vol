@@ -36,7 +36,7 @@ source(here("code/rintamaki_replication/models/helper_code.R"))
 
 # Replication {.tabset}
 
-Recall Rintamäki et al. 2017 in which the authors investigate whether renewable energy generation impacts the volatility of electricity prices in Germany and Denmark (two zones in DK). They use the standard deviation of hourly prices to measure daily price volatility (and SD of daily prices for weekly volatility). They then estimate a SARMA model in each case accouning for short-term price volatility as well as weekly seasonality in the data.
+Recall [Rintamäki et al. 2017](https://doi.org/10.1016/j.eneco.2016.12.019) in which the authors investigate whether renewable energy generation impacts the volatility of electricity prices in Germany and Denmark (two zones in DK). They use the standard deviation of hourly prices to measure daily price volatility (and SD of daily prices for weekly volatility). They then estimate a SARMA model in each case accouning for short-term price volatility as well as weekly seasonality in the data.
 
 *Abstract:*
 *"Although variable renewable energy (VRE) technologies with zero marginal costs decrease electricity prices, the literature is inconclusive about how the resulting shift in the supply curves impacts price volatility. Because the flexibility to respond to high peak and low off-peak prices is crucial for demand-response applications and may compensate for the losses of conventional generators caused by lower average prices, there is a need to understand how the penetration of VRE affects volatility. In this paper, we build distributed lag models with Danish and German data to estimate the impact of VRE generation on electricity price volatility. We find that in Denmark wind power decreases the daily volatility of prices by flattening the hourly price profile, but in Germany it increases the volatility because it has a stronger impact on off-peak prices. Our analysis suggests that access to flexible generation capacity and wind power generation patterns contribute to these differing impacts. Meanwhile, solar power decreases price volatility in Germany. By contrast, the weekly volatility of prices increases in both areas due to the intermittency of VRE. Thus, policy measures for facilitating the integration of VRE should be tailored to such region-specific patterns."*
@@ -520,7 +520,7 @@ for(dep in c("op1_dk2_", "op2_dk2_", "p_dk2_")){
 
 ### Hourly prices
 
-Using data from [https://ember-energy.org/data/european-wholesale-electricity-price-data/](EMBER) on European wholesale electricity prices (hourly - daily and monthly also exist), I perform the same analysis as above. The hourly prices are the day-ahead wholesale prices by country.
+Using data from [EMBER](https://ember-energy.org/data/european-wholesale-electricity-price-data/) on European wholesale electricity prices (hourly - daily and monthly also exist), I perform the same analysis as above. The hourly prices are the day-ahead wholesale prices by country.
 
 ```{r, echo = FALSE, fig.height = 14}
 
