@@ -104,10 +104,27 @@ This is where we have our current comparative advantage in that we can model hou
 
 ```{r, cache = TRUE}
 
+### ENTSOE Data
+entsoe <- readRDS(here("data/out/entsoe_load_data_consolidated.rds")) %>% 
+  # MATCH on DE and DK (DK_W exists but only for earlier time period - until end of 2009)
+  tibble
+
 # Loads hourly price data for de, dk1, dk2
 for(cty in c('dk1', 'dk2', 'de')){
+  temp_entsoe <- entsoe %>% 
+    filter(country_code == toupper(gsub("\\d", "", cty))) %>% 
+    # THIS NEEDS TO BE CORRECTED - FOR NOW CERTAIN TIME PERIODS HAVE MULTIPLE OBSERVATIONS WITH DIFFERENT COVERAGE RATIOS - FIX IN CLEANING_ENTSOE_LOAD.R
+    group_by(date_utc) %>%
+    slice_max(cov_ratio, n = 1) %>%
+    ungroup() %>% 
+    # Certain 2 am recordings in various days in March of 2010-2014 are NA...fill these values for now but should be investigated
+    fill(load, .direction = c("down"))
+           
   temp <- read_xlsx(here('code/rintamaki_replication/data/raw_data.xlsx'), sheet = cty) %>% 
-    clean_names
+    clean_names %>% 
+    mutate(date = ymd_h(paste(date, hour))) %>% 
+    left_join(., temp_entsoe, by = join_by(date == date_utc)) 
+  
   assign(paste0("data_", cty), temp)
 }
 
@@ -130,19 +147,23 @@ de_mod <- arx(data_de$de_price,
               # Include 24 ARCH terms to be selected over
               # Question: In theory, the ARCH(24) would proxy the seasonal (daily) AR term?
               arch = 1:24, 
+              mxreg = as.matrix(data_de[c('de_wind_fcast', 'de_solar_fcast', 'de_fr', 'fr_de', 'load')]), 
               # Additional regressors to select over (only wind forecasts, solar forecasts, and imports between Germany and France are available at hourly frequency in the replication data)
               # Worth doing additional data scoping
               # Also perhaps worth including additional indicators for time of day (assuming this variation is not mopped up by the moving average terms)
-              vxreg = as.matrix(data_de[c('de_wind_fcast', 'de_solar_fcast', 'de_fr', 'fr_de')]), 
+              vxreg = as.matrix(data_de[c('de_wind_fcast', 'de_solar_fcast', 'de_fr', 'fr_de', 'load')]), 
               # As in Rintamaki et al. the below line incorporates moving average terms for the half-day (12), day (24 hours) and week (168 hours) 
               log.ewma = c(12, 24, 168)) 
 
+de_mod %>% plot
 
 # Perform gets model selection over the log-variance model above
 # Turn of ARCH diagnostics as the GUM does not pass (could possible manipulate lag and p value choice here)
 de_vmod <- getsv(de_mod, t.pval = 0.001, ar.LjungB = NULL)
 
 de_vmod %>% plot
+
+data_de %>% filter(de_price < 0)
 
 ```
 
@@ -159,10 +180,12 @@ data_dk1 %>% arrange(date, hour) %>% identical(data_dk1)
 
 # Same spec as above with appropriate corrections to the regressors
 dk1_mod <- arx(data_dk1$dk1_price, 
+              mxreg = as.matrix(data_dk1[c("dk1_load_fcast", "dk1_wind_fcast", "dk1_no2", "no2_dk1", "dk1_se3", "se3_dk1")]),
               arch = 1:24, 
               vxreg = as.matrix(data_dk1[c("dk1_load_fcast", "dk1_wind_fcast", "dk1_no2", "no2_dk1", "dk1_se3", "se3_dk1")]),
                log.ewma = c(12, 24, 168)) 
 
+dk1_mod %>% plot
 
 # Perform gets model selection over the log-variance model above
 dk1_vmod <- getsv(dk1_mod, t.pval = 0.001, ar.LjungB = NULL)
@@ -184,11 +207,15 @@ data_dk2 %>% arrange(date, hour) %>% identical(data_dk2)
 
 # Same spec as above with appropriate corrections to the regressors
 dk2_mod <- arx(data_dk2$dk2_price, 
+               mxreg = as.matrix(data_dk2[c("dk2_load_fcast", "dk2_wind_fcast", 
+                                 "dk2_se4","dk2_se4_2")]),
               arch = 1:24, 
               vxreg = as.matrix(data_dk2[c("dk2_load_fcast", "dk2_wind_fcast", 
                                  "dk2_se4","dk2_se4_2")]),
                log.ewma = c(12, 24, 168)) 
 
+
+dk2_mod %>% plot
 
 # Perform gets model selection over the log-variance model above
 dk2_vmod <- getsv(dk2_mod, t.pval = 0.001, ar.LjungB = NULL)
@@ -518,12 +545,11 @@ for(dep in c("op1_dk2_", "op2_dk2_", "p_dk2_")){
 
 ## Extending to Europe {.tabset}
 
-### Hourly prices
+### Hourly prices & Demand
 
 Using data from [EMBER](https://ember-energy.org/data/european-wholesale-electricity-price-data/) on European wholesale electricity prices (hourly - daily and monthly also exist), I perform the same analysis as above. The hourly prices are the day-ahead wholesale prices by country.
 
 ```{r, echo = FALSE, fig.height = 14}
-
 eu_hourly <- read.csv(here('data/raw/EMBER_europe_wholesale_data/all_countries.csv')) %>% 
   tibble %>% 
   clean_names %>% 
@@ -532,8 +558,19 @@ eu_hourly <- read.csv(here('data/raw/EMBER_europe_wholesale_data/all_countries.c
 eu_hourly %>% 
   ggplot(aes(x = datetime_local, y = price_eur_m_whe)) +
   geom_line() +
-  facet_wrap(~country, ncol = 4) +
+  facet_wrap(~country, ncol = 4, scales = "free") +
   labs(title = "Hourly Wholesale Electricity Prices", subtitle = "Prices are average day-ahead spot prices per MWh sold per time period", x = "Date", y = "Euro/MWh") +
+  theme_minimal()
+```
+
+The following is data from [ENTSO-E](https://www.entsoe.eu/data/power-stats/) on hourly electricity loads. Some of the country codes are inconsistent which explains some of the missing data for certain years. Will fix this. 
+
+```{r, echo = FALSE, fig.height = 14}
+entsoe %>% 
+  ggplot(aes(x = date_utc, y = load)) +
+  geom_line() +
+  facet_wrap(~country_code, ncol = 4, scales = "free") + 
+  labs(title = "Hourly Electricity Load", subtitle = "Date from ENTSO-E", x = "Date", y = "UNIT?") +
   theme_minimal()
   
 ```
@@ -603,6 +640,13 @@ ggplot() +
   labs(title = "Daily and Monthly Wholesale Electricity Prices", subtitle = "Black (blue) represents daily (monthly) prices.", y = "Price (EUR/MWH)", x = "Date") +
   theme_minimal()
 
-```
+ggplot() +
+  geom_line(data = eu_daily, aes(x = date, y = price_eur_m_whe)) +
+  geom_line(data = eu_monthly, aes(x = date, y = price_eur_m_whe), color = "steelblue") +
+  scale_y_continuous(trans='log2') +
+  facet_wrap(~country) +
+  labs(title = "Daily and Monthly Wholesale Electricity Prices", subtitle = "Black (blue) represents daily (monthly) prices.", y = "Price (EUR/MWH)", x = "Date") +
+  theme_minimal()
 
+```
 
