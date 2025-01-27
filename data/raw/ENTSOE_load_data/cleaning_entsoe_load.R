@@ -24,9 +24,20 @@ for(yr in 2019:2024){
   
 }
 
-#### 2015-2019
-### NOTE THAT COVERAGE RATIO IS NOT 100 for all observations in this (6% of observations ahve 98covratio) - Solved: ScaleTo100 corrects this!
-temp <- read_xlsx(here("data/raw/ENTSOE_load_data/MHLV_data-2015-2019.xlsx"))
+#### 2015-2018
+### NOTE THAT COVERAGE RATIO IS NOT 100 for all observations in this (6% of observations have 98covratio) - Solved: ScaleTo100 corrects this!
+# Sheet one includes data from 2015-2017
+temp <- read_xlsx(here("data/raw/ENTSOE_load_data/MHLV_data-2015-2019.xlsx"), sheet = 1)
+
+assert_that(n_distinct(temp$MeasureItem) == 1)
+
+full_df <- temp %>% 
+  select(DateUTC, CountryCode, Value_ScaleTo100, Cov_ratio) %>% 
+  clean_names %>% 
+  rbind(full_df, .)
+
+# Sheet 2 includes data from 2018
+temp <- read_xlsx(here("data/raw/ENTSOE_load_data/MHLV_data-2015-2019.xlsx"), sheet = 2)
 
 assert_that(n_distinct(temp$MeasureItem) == 1)
 
@@ -54,6 +65,6 @@ full_df %>%
   geom_line(aes(x = date_utc, y = value_scale_to100)) +
   facet_wrap(~country_code, scales = "free")
 
-full_df %>% 
-  rename(load = value_scale_to100) %>% 
+full_df %>%
+  rename(load = value_scale_to100) %>%
   saveRDS(here("data/out/entsoe_load_data_consolidated.rds"))
