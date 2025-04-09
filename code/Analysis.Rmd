@@ -1,0 +1,537 @@
+---
+title: "Electricity Prices & Renewable Generation"
+author: "Ebba Mark"
+date: '`r Sys.Date()`'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(here)
+library(gets)
+library(readxl)
+library(janitor)
+library(conflicted)
+library(patchwork)
+library(fastDummies)
+library(modelsummary)
+library(countrycode)
+library(tidyquant)
+conflict_prefer_all("gets", quiet = TRUE)
+conflicts_prefer(dplyr::filter)
+knitr::opts_chunk$set(echo = TRUE)
+
+source(here("code/rintamaki_replication/models/helper_code.R"))
+
+```
+
+# {.tabset}
+## Start simple: Germany Only {.tabset}
+
+### Data: Determinants of Electricity Prices
+
+Using data from [EMBER](https://ember-energy.org/data/european-wholesale-electricity-price-data/) on European wholesale electricity prices (hourly - daily and monthly also exist). The hourly prices are the day-ahead wholesale prices by country.
+
+```{r, echo = FALSE, fig.height = 8, warning = FALSE, cache = TRUE}
+
+de_hourly_prices <- read.csv(here('data/raw/EMBER_europe_wholesale_data/all_countries.csv')) %>% 
+  tibble %>% 
+  clean_names %>% 
+  mutate(across(contains("datetime"), ~ymd_hms(.x))) %>% 
+  filter(country == "Germany")
+
+de_hourly_prices %>% 
+  ggplot(aes(x = datetime_utc, y = price_eur_m_whe)) +
+  geom_line(color = "grey") +
+  geom_ma(ma_fun = SMA, n = 731, color = "purple", linetype = "solid") +
+  geom_ma(ma_fun = SMA, n = 8766, color = "red", linetype = "solid") +
+  theme_minimal() + 
+  labs(x = "Date", y = "Wholesale Electricity Price (Euro/MWh", title = "Hourly Wholesale Electricity Prices in Germany (January 2015- December 2024)")
+
+```
+
+
+#### Electricity Demand/Load
+
+Total load per bidding zone per market time unit - in our case, total load, per country, per hour in MW.
+
+[Source](https://transparency.entsoe.eu/content/static_content/Static%20content/knowledge%20base/data-views/load-domain/Data-view%20Total%20Load%20-%20Day%20Ahead%20-%20Actual.html)
+
+The following is data from [ENTSO-E](https://www.entsoe.eu/data/power-stats/) on hourly electricity loads. 
+
+Components: Actual total load (including losses without stored energy) = net generation – exports + imports – absorbed energy
+
+```{r, echo = FALSE, fig.height = 8, warning = FALSE, cache = TRUE}
+
+### ENTSOE Data
+entsoe_de <- readRDS(here("data/out/entsoe_load_data_consolidated.rds")) %>% 
+  tibble %>% 
+  # Filters old observations from 2006-07 for CS - Serbia and Montenegro - represented by "RS" and "ME", respectively
+  filter(!(country_code %in% c("CS"))) %>% 
+  # Denmark is inconsistently names - DK_W until 2010 and DK after 2010 - no observation for Denmark East exists therefore consolidation seems OK
+  mutate(country_code = ifelse(country_code == "DK_W", "DK", country_code),
+         # adds new column with country names
+         country = countrycode(country_code, "iso2c", "country.name"),
+         country = ifelse(is.na(country), paste0("?",country_code, "?"), country)) %>% 
+  # restrict to country's for which we have hourly price data
+  filter(country == "Germany") %>% 
+  group_by(date_utc, country_code, country) %>% 
+  summarise(load = max(load)) %>% 
+  ungroup
+
+entsoe_de %>% 
+  filter(date_utc >= "2015-01-01" & date_utc < "2025-01-01") %>% 
+  ggplot() + 
+  geom_line(aes(x = date_utc, y = load), size = 0.05) 
+  
+```
+
+#### Generation by Resource
+
+Actual Generation per Production Type from [ENTSOE](https://transparency.entsoe.eu/content/static_content/Static%20content/knowledge%20base/data-views/generation/Data-view%20Actual%20Generation%20per%20Production%20Unit.html)
+This value represents the actual aggregated net generation output in MW per market time unit (hour) and per production type.
+
+```{r, echo = FALSE, fig.height = 8, warning = FALSE, cache = TRUE}
+
+de_generation <- readRDS(here('data/raw/ENTSOE/generation_per_prod_type_DE/de_generation_consolidated.rds')) %>% 
+  mutate(country_code = "DE",
+         country = "Germany") %>% 
+  relocate(country, country_code) %>% 
+  arrange(date_utc) %>% 
+  # Investigate NAs...
+  mutate(across(contains("mean"), ~ifelse(is.nan(.), NA, .))) %>% 
+  rowwise() %>% 
+  mutate(gen_biomass_mw = mean_biomass_actual_aggregated_mw,
+         gen_storage_mw = mean_energy_storage_actual_aggregated_mw,
+         gen_coal_mw = sum(mean_fossil_brown_coal_lignite_actual_aggregated_mw, mean_fossil_coal_derived_gas_actual_aggregated_mw, mean_fossil_hard_coal_actual_aggregated_mw, na.rm = TRUE),
+         gen_gas_mw = mean_fossil_gas_actual_aggregated_mw,
+         gen_oil_mw = sum(mean_fossil_oil_actual_aggregated_mw, mean_fossil_oil_shale_actual_aggregated_mw, na.rm = TRUE),
+         gen_peat_mw = mean_fossil_peat_actual_aggregated_mw,
+         gen_geothermal_mw = mean_geothermal_actual_aggregated_mw,
+         gen_hydro_mw = 
+           sum(mean_hydro_pumped_storage_actual_aggregated_mw,mean_hydro_pumped_storage_actual_consumption_mw,
+               mean_hydro_run_of_river_and_poundage_actual_aggregated_mw, 
+               mean_hydro_water_reservoir_actual_aggregated_mw, mean_marine_actual_aggregated_mw, na.rm = TRUE),
+         gen_nuclear_mw = mean_nuclear_actual_aggregated_mw,
+         gen_other_mw = sum(mean_other_actual_aggregated_mw, mean_waste_actual_aggregated_mw, na.rm = TRUE),
+         gen_other_renewable_mw = mean_other_renewable_actual_aggregated_mw,
+         gen_solar_mw = mean_solar_actual_aggregated_mw,                          
+         gen_wind_mw = sum(mean_wind_offshore_actual_aggregated_mw, mean_wind_onshore_actual_aggregated_mw, na.rm = TRUE)) %>% 
+  ungroup
+
+de_generation %>% 
+  filter(date_utc >= "2015-01-01" & date_utc < "2025-01-01") %>% 
+  select(date_utc, contains("gen")) %>% 
+  pivot_longer(!date_utc) %>% 
+  filter(!(name %in% c('gen_peat_mw', 'gen_storage_mw'))) %>% 
+  ggplot(aes(x = date_utc, y = value, group = name)) +
+  geom_line() +
+  geom_ma(ma_fun = SMA, n = 4383, color = "purple") +
+  geom_ma(ma_fun = SMA, n = 8766, color = "yellow") +
+  facet_wrap(~name, scales = "free")
+
+de_generation %>% 
+  filter(date_utc >= "2015-01-01" & date_utc < "2025-01-01") %>% 
+  mutate(ym = format(as.Date(date_utc), "%Y-%m")) %>% 
+  group_by(ym) %>% 
+  summarise(across(contains('gen'), ~mean(., na.rm = TRUE))) %>% 
+  pivot_longer(!ym) %>% 
+  mutate(ym = ym(ym)) %>% 
+  filter(!(name %in% c('gen_peat_mw', 'gen_storage_mw'))) %>% 
+  ggplot(aes(x = as.Date(ym), y = value, fill = name)) +
+  geom_area() +
+  labs(x = "Date", y = "Total Generation (MW)", title = "Electricity Generated (MW) by Source")
+
+```
+
+#### Fuel Prices and Costs
+IMF provides monthly commodity prices and price indices. This will need to be filtered to relevant indices.
+
+```{r, echo = FALSE, fig.height = 6, warning = FALSE, cache = TRUE}
+commodity_prices <- read_xls(here("data/raw/imf_primary_commodity_price_data_external-data.xls")) 
+# Step 1: Extract the description rows (2 to 4)
+descriptions <- commodity_prices %>%
+  slice(1:3) %>% 
+  select(-1)
+
+# Step 2: Extract the actual data (from row 5 onward)
+data <- commodity_prices %>%
+  slice(-(1:3)) %>% 
+  rename(date = Commodity)
+
+# Step 3: Transpose descriptions to align with column names
+description_long <- descriptions %>% 
+  pivot_longer(everything(), names_to = "column", values_to = "value") %>%
+  group_by(column) %>%
+  mutate(desc_row = paste0("desc_", row_number())) %>%
+  pivot_wider(names_from = desc_row, values_from = value)
+
+# Step 4: Join descriptions back into the data
+data_long <- data %>%
+  pivot_longer(-date, names_to = "column", values_to = "value") %>%
+  left_join(description_long, by = "column")
+
+# Step 5: Optional — tidy format back to wide if needed
+final_data <- data_long %>%
+  pivot_wider(names_from = column, values_from = value) %>% 
+  rename(commodity_type = desc_1,
+         type = desc_2,
+         frequency = desc_3) %>% 
+   separate(date, sep = "M", into = c("year", "month")) %>% 
+    mutate(across(!c(commodity_type, type, frequency), as.numeric)) %>% 
+  mutate(date_utc = ym(paste0(year, month)))
+
+
+final_data %>% 
+  pivot_longer(!c(year, month, commodity_type, type, frequency, date_utc)) %>% 
+  filter(!is.na(value)) %>% 
+  ggplot(aes(x = date_utc, y = value, color = name)) + 
+  geom_line() + 
+  facet_wrap(~type, scales = "free_y") + 
+  theme(legend.position = "bottom") +
+  labs(title = "Commodity Prices and Price Indices", x = "Date", y = "Value")
+
+
+```
+
+
+
+##### Natural Gas Prices
+Natural Gas, Netherlands TTF Natural Gas Forward Day Ahead, US$ per Million Metric British Thermal Unit
+
+```{r, echo = FALSE, fig.height = 6, warning = FALSE, cache = TRUE}
+ng_price <- final_data %>% 
+  select(date_utc, PNGASEU) %>% 
+  filter(!is.na(PNGASEU)) 
+
+ng_price %>% 
+  ggplot(aes(x = date_utc, y = PNGASEU)) + 
+  geom_line() +
+  labs(title = "Natural Gas, Netherlands TTF Natural Gas Forward Day Ahead, US$ per Million Metric British Thermal Unit", y = "Natural Gas Price", x = "Date") + 
+  theme_minimal()
+
+```
+
+
+#### Imports (Costs and Levels)
+Imports and export flows of electricity from [ENTSOE Transparency Platform](https://transparency.entsoe.eu/content/static_content/Static%20content/knowledge%20base/data-views/transmission-domain/Data-view%20Cross%20Border%20Physical%20Flows.html).
+Physical flows between bidding zones per market time unit.
+Physical flow is defined as the measured real flow of energy between neighbouring bidding zones on the cross borders.
+
+Note 1: Net imports still has some missing data and I'm not quite sure where it comes from (see Austria, Denmark, Switzerland).
+Note 2: Also, the seeming upper and lower limits must have to do with capacity constraints on imports and exports (see Belgium, Norway, Sweden).
+
+```{r, echo = FALSE, fig.height = 8, warning = FALSE, cache = TRUE}
+
+imp_exp <- readRDS(here("data/raw/ENTSOE/imports_exports_DE/imports_exports_DE.RDS")) %>% 
+  rename(date_utc = date) %>% 
+  rowwise() %>%
+  mutate(total_net_imports = sum(c_across(starts_with("net_imports_")), na.rm = TRUE)) %>%
+  ungroup()
+
+imp_exp %>%
+  select(date_utc, contains("net_imports")) %>%
+  filter(date_utc >= "2015-01-01" & date_utc < "2025-01-01") %>%
+  pivot_longer(!date_utc) %>%
+  ggplot(aes(x =  date_utc, y = value, color = name)) +
+  geom_line(color = "grey50") +
+  geom_ma(ma_fun = SMA, n = 731, color = "purple") +
+  geom_ma(ma_fun = SMA, n = 4383, color = "blue") +
+  geom_ma(ma_fun = SMA, n = 8766, color = "yellow") +
+  facet_wrap(~name, scales = "free_y")
+
+imp_exp %>% 
+  ggplot(aes(x = date_utc, y = total_net_imports)) + 
+  geom_line(color = "grey50") +
+  geom_ma(ma_fun = SMA, n = 731, color = "purple") +
+  geom_ma(ma_fun = SMA, n = 4383, color = "blue") +
+  geom_ma(ma_fun = SMA, n = 8766, color = "yellow")
+
+```
+
+#### Day-ahead Solar and Wind Forecasts
+
+A forecast of wind and solar power generation (MW) per country per hour of the following day data from [ENTSOE Transparency Platform](https://transparency.entsoe.eu/content/static_content/Static%20content/knowledge%20base/data-views/generation/Data-view%20Generation%20Forecasts%20-%20Day%20Ahead%20for%20Wind%20and%20Solar.html).
+
+```{r, echo = FALSE, fig.height = 10, warning = FALSE, cache = TRUE}
+
+fcast_sw <- readRDS(here("data/raw/ENTSOE/generation_forecasts_solar_wind/de_forecasts_solar_wind_consolidated.RDS")) %>% 
+  rename(date_utc = date)
+
+fcast_sw %>% 
+  pivot_longer(!date_utc) %>% 
+  ggplot(aes(x = date_utc, y = value, group = name, color = name)) + 
+  geom_line(alpha = 0.2) +
+  #geom_ma(ma_fun = SMA, n = 731, color = "yellow") +
+  geom_ma(ma_fun = SMA, n = 4383) +
+  geom_ma(ma_fun = SMA, n = 8766) #+
+  #facet_wrap(~name)
+
+```
+
+#### Combining Data
+
+```{r, echo = FALSE, fig.height = 8, warning = FALSE, cache = TRUE}
+
+de_all <- de_hourly_prices %>% 
+  rename(date_utc = datetime_utc) %>% 
+  left_join(., entsoe_de, by = c("date_utc", "country")) %>% 
+  left_join(., de_generation, by = c("date_utc", "country", "country_code")) %>% 
+  arrange(date_utc) %>% 
+  select(-starts_with("sum_")) %>% 
+  filter(date_utc < "2024-03-31 02:00:00" & !is.na(gen_biomass_mw)) %>% 
+  mutate(across(contains("gen"), ~log(. + 1), .names = "log_{.col}"),
+         across(starts_with("gen"), ~./load, .names = "share_{.col}"),
+         log_load = log(load+1)) %>% 
+  left_join(., imp_exp, by = "date_utc") %>% 
+  mutate(across(contains("net_imports"), ~ifelse(is.na(.), 0, .)),
+         share_net_imports = total_net_imports/load) %>% 
+  left_join(., fcast_sw, by = "date_utc")
+
+de_full <- de_all %>% 
+  left_join(., ng_price, by = "date_utc") %>% 
+  fill(PNGASEU, .direction = "down") %>% 
+  mutate(hour = as.factor(hour(datetime_local)),
+         month = as.factor(month(datetime_local))) %>% 
+  dummy_cols(select_columns = c("hour", "month"), remove_first_dummy = TRUE, remove_selected_columns = TRUE)
+
+```
+
+
+### Approaching a model...
+Below, I incorporate all explanatory variables (except solar and wind forecasts) above into a model of the mean (not yet variance). The first model incorporates the variables simply as levels whereas the second incorporates them as shares of total "load."
+
+Questions: 
+- day-ahead versus current prices in all variables - are we not interested in deviations from forecasts for price-setting?
+
+```{r, fig.height = 14, warning = FALSE}
+
+# Check to make sure data is ordered
+de_full %>% arrange(date_utc) %>% all.equal(de_full)
+
+# The below model incorporates ARCH(24) to be selected over, available regressors for wind forecasts, solar forecasts, and imports to and from France. In line with Rintamaki et al, we incorporate moving average terms for half-day, daily, and weekly prices volatility (levels?). Seasonal moving average terms are not yet incorporated here as they are in Rintamaki et al. Rather we might want to consider the seasonal moving average to have a periodicity of 24 hours (moving average over the same time of day)
+de_mod_levs <- arx(de_full$price_eur_m_whe, 
+              mxreg = as.matrix(select(de_full,
+                                       
+                                       'log_load', 
+                                       'log_gen_biomass_mw',  'log_gen_gas_mw', 
+                                       'log_gen_geothermal_mw', #'gen_nuclear_mw', 
+                                       'log_gen_other_renewable_mw', 
+                                       'log_gen_solar_mw', 
+                                       'PNGASEU', 
+                                       contains('hour'), 
+                                       contains('month'),
+                                       "net_imports_SE",
+                                       "net_imports_PL",
+                                       "net_imports_CZ",
+                                       "net_imports_BE",
+                                       "net_imports_CH",
+                                       "net_imports_NO",
+                                       "net_imports_NL",
+                                       "net_imports_LU",
+                                       "net_imports_FR",
+                                       "net_imports_DK",
+                                       "net_imports_AT"
+                                       #"total_net_imports"
+                                       )))# 'gen_wind_mw' 'gen_coal_mw', 'gen_hydro_mw',
+
+de_mod_levs %>% plot
+# Need to disable Ljung Box tests because GUM does not pass diagnostic tests
+de_levs_sel <- getsm(de_mod_levs, ar.LjungB = NULL, arch.LjungB = NULL)
+de_levs_sel %>% plot
+
+de_mod_shares <- arx(de_full$price_eur_m_whe, 
+              mxreg = as.matrix(select(de_full, 
+                                       'share_gen_biomass_mw',  
+                                       'share_gen_gas_mw', 
+                                       'share_gen_geothermal_mw', #'gen_nuclear_mw', 
+                                       'share_gen_other_renewable_mw',
+                                       'share_gen_solar_mw',
+                                       'PNGASEU',
+                                       contains('hour'), 
+                                       contains('month'),
+                                       share_net_imports)))# 'gen_wind_mw' 'gen_coal_mw', 'gen_hydro_mw',
+              
+
+de_mod_shares %>% plot
+# Need to disable 
+de_shares_sel <- getsm(de_mod_shares, ar.LjungB = NULL, arch.LjungB = NULL)
+de_shares_sel %>% plot
+
+
+# # Perform gets model selection over the log-variance model above
+# # Turn of ARCH diagnostics as the GUM does not pass (could possible manipulate lag and p value choice here)
+# de_vmod <- getsv(de_mod, t.pval = 0.001, ar.LjungB = NULL)
+# 
+# de_vmod %>% plot
+# 
+# data_de %>% filter(de_price < 0)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+## (TBA) Spotlight on UK, Germany, Denmark
+
+Here, see the time series for Germany and Denmark (to compare to the data avialable in Rintamaki et al. - color portion of the TS plots). UK spotlight to discuss potential interest to David. 
+
+```{r, echo = FALSE, eval = FALSE, fig.height = 10, warning = FALSE}
+
+
+### ENTSOE Data
+entsoe <- readRDS(here("data/out/entsoe_load_data_consolidated.rds")) %>% 
+  # MATCH on DE and DK (DK_W exists but only for earlier time period - until end of 2009)
+  tibble
+
+# Loads hourly price data for de, dk1, dk2
+for(cty in c('dk1', 'dk2', 'de')){
+  temp_entsoe <- entsoe %>% 
+    filter(country_code == toupper(gsub("\\d", "", cty))) %>% 
+    # THIS NEEDS TO BE CORRECTED - FOR NOW CERTAIN TIME PERIODS HAVE MULTIPLE OBSERVATIONS WITH DIFFERENT COVERAGE RATIOS - FIX IN CLEANING_ENTSOE_LOAD.R
+    group_by(date_utc) %>%
+    slice_max(cov_ratio, n = 1) %>%
+    ungroup() %>% 
+    # Certain 2 am recordings in various days in March of 2010-2014 are NA...fill these values for now but should be investigated
+    fill(load, .direction = c("down"))
+           
+  temp <- read_xlsx(here('code/rintamaki_replication/data/raw_data.xlsx'), sheet = cty) %>% 
+    clean_names %>% 
+    mutate(date = ymd_h(paste(date, hour))) %>% 
+    left_join(., temp_entsoe, by = join_by(date == date_utc)) 
+  
+  assign(paste0("data_", cty), temp)
+}
+
+eu_hourly <- read.csv(here('data/raw/EMBER_europe_wholesale_data/all_countries.csv')) %>% 
+  tibble %>% 
+  clean_names %>% 
+  mutate(across(contains("datetime"), ~ymd_hms(.x))) 
+# Germany
+p_uk <- eu_hourly %>% 
+  filter(country == "United Kingdom") %>% 
+  ggplot() +
+  geom_line(aes(x = datetime_local, y = price_eur_m_whe), linewidth = 0.1) +
+  labs(title = "UK: Hourly Electricity Prices", y = "Hourly Electricity Price (EUR/MWH)", x = "Date")
+
+# Germany
+p_de <- data_de %>% 
+  ggplot(aes(x = date, y = de_price)) +
+  geom_line(linewidth = 0.1, color = "purple") +
+  geom_line(data = filter(eu_hourly, country == "Germany"), aes(x = datetime_local, y = price_eur_m_whe), linewidth = 0.1) +
+  labs(title = "Germany: Hourly Electricity Prices", y = "Hourly Electricity Price (EUR/MWH)", x = "Date")
+
+# DK1
+p_dk1 <- ggplot() +
+  geom_line(data = data_dk1, aes(x = date, y = dk1_price), linewidth = 0.1, color = "darkgreen") +
+  geom_line(data = filter(eu_hourly, country == "Denmark"), aes(x = datetime_local, y = price_eur_m_whe)) +
+  labs(title = "Denmark: Hourly Electricity Prices", subtitle = "Using DK1 prices from Rintamaki et al.", y = "Hourly Electricity Price (EUR/MWH)", x = "Date")
+
+# DK2
+p_dk2 <- data_dk2 %>% 
+  ggplot(aes(x = date, y = dk2_price)) +
+  geom_line(linewidth = 0.1, color = "coral") +
+  geom_line(data = filter(eu_hourly, country == "Denmark"), aes(x = datetime_local, y = price_eur_m_whe)) +
+  labs(title = "Denmark: Hourly Electricity Prices", subtitle = "Using DK2 prices from Rintamaki et al.", y = "Hourly Electricity Price (EUR/MWH)", x = "Date")
+
+
+((p_uk + p_de) / (p_dk1 + p_dk2)) + plot_annotation(
+  title = 'Hourly Wholesale Electricity Price Data UK, Germany, and Denmark',
+  subtitle = 'Black represents EMBER data, colorful data represents data from Rintamaki replication.',
+)
+
+```
+
+### Daily and Monthly Prices
+```{r, eval = FALSE, echo = FALSE, fig.height = 10, warning = FALSE}
+
+eu_daily <- read.csv(here('data/raw/EMBER_europe_wholesale_data/european_wholesale_electricity_price_data_daily.csv')) %>% 
+  tibble %>% 
+  clean_names %>% 
+  mutate(date = ymd(date))
+
+
+eu_monthly <- read.csv(here('data/raw/EMBER_europe_wholesale_data/european_wholesale_electricity_price_data_monthly.csv')) %>% 
+  tibble %>% 
+  clean_names %>% 
+  mutate(date = ymd(date))
+
+ggplot() +
+  geom_line(data = eu_daily, aes(x = date, y = price_eur_m_whe)) +
+  geom_line(data = eu_monthly, aes(x = date, y = price_eur_m_whe), color = "steelblue") +
+  facet_wrap(~country) +
+  labs(title = "Daily and Monthly Wholesale Electricity Prices", subtitle = "Black (blue) represents daily (monthly) prices.", y = "Price (EUR/MWH)", x = "Date") +
+  theme_minimal()
+
+ggplot() +
+  geom_line(data = eu_daily, aes(x = date, y = price_eur_m_whe)) +
+  geom_line(data = eu_monthly, aes(x = date, y = price_eur_m_whe), color = "steelblue") +
+  scale_y_continuous(trans='log2') +
+  facet_wrap(~country) +
+  labs(title = "Daily and Monthly Wholesale Electricity Prices", subtitle = "Black (blue) represents daily (monthly) prices.", y = "Price (EUR/MWH)", x = "Date") +
+  theme_minimal()
+
+```
+
+## (TBA) Full Extension to Europe
+
+Using data from [EMBER](https://ember-energy.org/data/european-wholesale-electricity-price-data/) on European wholesale electricity prices (hourly - daily and monthly also exist), I perform the same analysis as above. The hourly prices are the day-ahead wholesale prices by country.
+
+```{r, echo = FALSE,eval = FALSE,  fig.height = 14, warning = FALSE}
+library(countrycode)
+
+eu_hourly <- read.csv(here('data/raw/EMBER_europe_wholesale_data/all_countries.csv')) %>% 
+  tibble %>% 
+  clean_names %>% 
+  mutate(across(contains("datetime"), ~ymd_hms(.x)))
+
+eu_hourly %>% 
+  ggplot(aes(x = datetime_local, y = price_eur_m_whe)) +
+  geom_line() +
+  facet_wrap(~country, ncol = 4, scales = "free") +
+  labs(title = "Hourly Wholesale Electricity Prices", subtitle = "Prices are average day-ahead spot prices per MWh sold per time period", x = "Date", y = "Euro/MWh") +
+  theme_minimal()
+
+sample <- eu_hourly %>% 
+  select(country) %>% 
+  unique
+
+```
+
+The following is data from [ENTSO-E](https://www.entsoe.eu/data/power-stats/) on hourly electricity loads. 
+
+```{r, echo = FALSE, eval = FALSE, fig.height = 14, warning = FALSE}
+
+### ENTSOE Data
+entsoe <- readRDS(here("data/out/entsoe_load_data_consolidated.rds")) %>% 
+  tibble %>% 
+  # Filters old observations from 2006-07 for CS - Serbia and Montenegro - represented by "RS" and "ME", respectively
+  filter(!(country_code %in% c("CS"))) %>% 
+  # Denmark is inconsistently names - DK_W until 2010 and DK after 2010 - no observation for Denmark East exists therefore consolidation seems OK
+  mutate(country_code = ifelse(country_code == "DK_W", "DK", country_code),
+         # adds new column with country names
+         country = countrycode(country_code, "iso2c", "country.name"),
+         country = ifelse(is.na(country), paste0("?",country_code, "?"), country)) %>% 
+  # restrict to country's for which we have hourly price data
+  filter(country %in% unique(eu_hourly$country)) 
+
+all.equal(sort(unique(entsoe$country)), sort(unique(eu_hourly$country)))
+
+entsoe %>% 
+  filter(date_utc >= "2010-01-01 00:00:00") %>% 
+  ggplot(aes(x = date_utc, y = load)) +
+  geom_line() +
+  facet_wrap(~country, ncol = 4, scales = "free_y") + 
+  labs(title = "Hourly Electricity Load", subtitle = "Date from ENTSO-E", x = "Date", y = "UNIT?") +
+  theme_minimal()
+  
+```
+
+
