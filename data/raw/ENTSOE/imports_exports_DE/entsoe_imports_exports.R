@@ -104,6 +104,16 @@ exp_imp <- full_imports_df %>%
   mutate(across(starts_with("imports"), 
                 ~ . - get(gsub("imports", "exports", cur_column())), 
                 .names = "net_{.col}")) 
+
+
+# Testing to make sure that NA values only result when BOTH imports and exports are NA
+for(k in abbrevs){
+  print(k)
+  exp_imp %>% 
+    select(date, contains(k)) %>% 
+    filter(is.na(get(paste0("net_imports_", k))) & !(is.na(get(paste0("imports_", k))) & is.na(get(paste0("exports_", k))))) %>% nrow(.) %>% print(.)
+}
+
 # exp_imp %>% 
 #   saveRDS(here("data/raw/ENTSOE/imports_exports_DE/imports_exports_DE.RDS"))
 identical(exp_imp, readRDS(here("data/raw/ENTSOE/imports_exports_DE/imports_exports_DE.RDS")))
