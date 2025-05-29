@@ -1,9 +1,11 @@
 ---
 title: "Electricity Prices & Renewable Generation"
 author: "Ebba Mark"
-date: '`r Sys.Date()`'
-output: html_document
-editor_options: 
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+editor_options:
   chunk_output_type: inline
 ---
 
@@ -30,7 +32,7 @@ source(here("code/rintamaki_replication/models/helper_code.R"))
 
 ```
 
-# Overview {.tabset}
+# Overview 
 
 **Motivation:** Recall our motivation originally stemming from an interest in the "relative" volatility of fossil fuel versus renewable prices. After repeated discussion regarding the comparability of the two types of energy sources and scoping of the data available we pivoted to questions more directly related to "explaining"/investigating the recent spike in electricity prices (both in level and volatility) following a surge in natural gas prices and the Russian invasion of Ukraine and how it might have been mediated (or not) by increased renewable energy generation.
 
@@ -71,8 +73,8 @@ Several data issues cropped up in the process. I note the most glaring issues in
 **Additional thoughts:** Though, ultimately, it would be very ineresting to broaden to a multi-country scope (especially if this might allow for some comparative analysis on variable country-specific shares of renewable electricity generation), we decided to focus on Germany as a first case to see how we go. If/when we take the step to further countries, any data that I pull from ENTSO-E has an accompanying scraping script that could (reasonably) easily be repurposed to pull the identical data on other countries.                            
 
 
-## **Start simple: Germany Only** {.tabset}
-### **Data** {.tabset}
+## **Start simple: Germany Only** 
+### **Data** 
 
 Using data from [EMBER](https://ember-energy.org/data/european-wholesale-electricity-price-data/) on European wholesale electricity prices (hourly - daily and monthly also exist). The hourly prices are the day-ahead wholesale prices in Germany.
 
@@ -581,7 +583,7 @@ de_full <- de_all %>%
 
 #### (TBA) Economic Activity
 
-### **Approaching a model...** {.tabset}
+### **Approaching a model...** 
 Below, I incorporate most explanatory variables (except solar and wind forecasts) above into models of the mean (not yet variance). The first model tab incorporates the variables simply as (log) levels whereas the second incorporates them as shares of total "load." In each tab, I run the model with the same set of regressors to be selected over but with or without a log.ewma argument. In line with Rintamaki et al, we incorporate moving average terms for half-day, daily, and weekly price volatility (levels?) via log.ewma argument (correct?). I need to think more closely about how that functions together with the hourly and monthly dummies. 
 
 **Note: log.ewma() for half-day, daily, and weekly price volatilities? Correct idea?**               
@@ -711,8 +713,7 @@ de_shares_sel_logewma %>% plot
 
 Here, see the time series for Germany and Denmark (to compare to the data avialable in Rintamaki et al. - color portion of the TS plots). UK spotlight to discuss potential interest to David. 
 
-```{r, echo = FALSE, eval = FALSE, fig.height = 10, warning = FALSE}
-
+```{r, echo = FALSE, fig.height = 10, warning = FALSE}
 
 ### ENTSOE Data
 entsoe <- readRDS(here("data/out/entsoe_load_data_consolidated.rds")) %>% 
@@ -777,40 +778,14 @@ p_dk2 <- data_dk2 %>%
 
 ```
 
-### Daily and Monthly Prices
-```{r, echo = FALSE, fig.height = 10, warning = FALSE}
 
-eu_daily <- read.csv(here('data/raw/EMBER_europe_wholesale_data/european_wholesale_electricity_price_data_daily.csv')) %>% 
-  tibble %>% 
-  clean_names %>% 
-  mutate(date = ymd(date))
+## (TBA) Full Extension to Europe 
 
+Note: Recall also that you can find our replication of [Rintamaki et al.](https://doi.org/10.1016/j.eneco.2016.12.019) [here](https://ebbam.github.io/ren_vol/code/rintamaki_replication/rintamaki_replication.html). We have yet to analyse the differences between the hourly volatility specification using getsv() versus the Rintamaki results. 
 
-eu_monthly <- read.csv(here('data/raw/EMBER_europe_wholesale_data/european_wholesale_electricity_price_data_monthly.csv')) %>% 
-  tibble %>% 
-  clean_names %>% 
-  mutate(date = ymd(date))
+### Hourly Prices
 
-ggplot() +
-  geom_line(data = eu_daily, aes(x = date, y = price_eur_m_whe)) +
-  geom_line(data = eu_monthly, aes(x = date, y = price_eur_m_whe), color = "steelblue") +
-  facet_wrap(~country) +
-  labs(title = "Daily and Monthly Wholesale Electricity Prices", subtitle = "Black (blue) represents daily (monthly) prices.", y = "Price (EUR/MWH)", x = "Date") +
-  theme_minimal()
-
-ggplot() +
-  geom_line(data = eu_daily, aes(x = date, y = price_eur_m_whe)) +
-  geom_line(data = eu_monthly, aes(x = date, y = price_eur_m_whe), color = "steelblue") +
-  scale_y_continuous(trans='log2') +
-  facet_wrap(~country) +
-  labs(title = "Daily and Monthly Wholesale Electricity Prices", subtitle = "Black (blue) represents daily (monthly) prices.", y = "Price (EUR/MWH)", x = "Date") +
-  theme_minimal()
-
-```
-
-## (TBA) Full Extension to Europe
-
-Using data from [EMBER](https://ember-energy.org/data/european-wholesale-electricity-price-data/) on European wholesale electricity prices (hourly - daily and monthly also exist), I perform the same analysis as above. The hourly prices are the day-ahead wholesale prices by country.
+Using data from [EMBER](https://ember-energy.org/data/european-wholesale-electricity-price-data/) on European wholesale electricity prices (hourly - daily and monthly also exist), The hourly prices are the day-ahead wholesale prices by country.
 
 ```{r, echo = FALSE, fig.height = 14, warning = FALSE, cache = TRUE}
 library(countrycode)
@@ -862,4 +837,35 @@ entsoe %>%
   
 ```
 
+
+### Daily and Monthly Prices
+```{r, echo = FALSE, fig.height = 10, warning = FALSE}
+
+eu_daily <- read.csv(here('data/raw/EMBER_europe_wholesale_data/european_wholesale_electricity_price_data_daily.csv')) %>% 
+  tibble %>% 
+  clean_names %>% 
+  mutate(date = ymd(date))
+
+
+eu_monthly <- read.csv(here('data/raw/EMBER_europe_wholesale_data/european_wholesale_electricity_price_data_monthly.csv')) %>% 
+  tibble %>% 
+  clean_names %>% 
+  mutate(date = ymd(date))
+
+ggplot() +
+  geom_line(data = eu_daily, aes(x = date, y = price_eur_m_whe)) +
+  geom_line(data = eu_monthly, aes(x = date, y = price_eur_m_whe), color = "steelblue") +
+  facet_wrap(~country) +
+  labs(title = "Daily and Monthly Wholesale Electricity Prices", subtitle = "Black (blue) represents daily (monthly) prices.", y = "Price (EUR/MWH)", x = "Date") +
+  theme_minimal()
+
+ggplot() +
+  geom_line(data = eu_daily, aes(x = date, y = price_eur_m_whe)) +
+  geom_line(data = eu_monthly, aes(x = date, y = price_eur_m_whe), color = "steelblue") +
+  scale_y_continuous(trans='log2') +
+  facet_wrap(~country) +
+  labs(title = "Daily and Monthly Wholesale Electricity Prices", subtitle = "Black (blue) represents daily (monthly) prices.", y = "Price (EUR/MWH)", x = "Date") +
+  theme_minimal()
+
+```
 
