@@ -32,7 +32,7 @@ source(here("code/rintamaki_replication/models/helper_code.R"))
 
 ```
 
-# Overview 
+# Overview {.tabset}
 
 **Motivation:** Recall our motivation originally stemming from an interest in the "relative" volatility of fossil fuel versus renewable prices. After repeated discussion regarding the comparability of the two types of energy sources and scoping of the data available we pivoted to questions more directly related to "explaining"/investigating the recent spike in electricity prices (both in level and volatility) following a surge in natural gas prices and the Russian invasion of Ukraine and how it might have been mediated (or not) by increased renewable energy generation.
 
@@ -73,8 +73,8 @@ Several data issues cropped up in the process. I note the most glaring issues in
 **Additional thoughts:** Though, ultimately, it would be very ineresting to broaden to a multi-country scope (especially if this might allow for some comparative analysis on variable country-specific shares of renewable electricity generation), we decided to focus on Germany as a first case to see how we go. If/when we take the step to further countries, any data that I pull from ENTSO-E has an accompanying scraping script that could (reasonably) easily be repurposed to pull the identical data on other countries.                            
 
 
-## **Start simple: Germany Only** 
-### **Data** 
+## **Start simple: Germany Only** {.tabset}
+### **Data** {.tabset}
 
 Using data from [EMBER](https://ember-energy.org/data/european-wholesale-electricity-price-data/) on European wholesale electricity prices (hourly - daily and monthly also exist). The hourly prices are the day-ahead wholesale prices in Germany.
 
@@ -591,7 +591,7 @@ de_full <- de_all %>%
 
 #### (TBA) Economic Activity
 
-### **Approaching a model...** 
+### **Approaching a model...** {.tabset}
 Below, I incorporate most explanatory variables (except solar and wind forecasts) above into models of the mean (not yet variance). The first model tab incorporates the variables simply as (log) levels whereas the second incorporates them as shares of total "load." In each tab, I run the model with the same set of regressors to be selected over but with or without a log.ewma argument. In line with Rintamaki et al, we incorporate moving average terms for half-day, daily, and weekly price volatility (levels?) via log.ewma argument (correct?). I need to think more closely about how that functions together with the hourly and monthly dummies. 
 
 **Note: log.ewma() for half-day, daily, and weekly price volatilities? Correct idea?**               
