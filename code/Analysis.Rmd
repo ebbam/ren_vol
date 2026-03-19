@@ -717,6 +717,29 @@ In this one, I get as close with built-in gets functionality to replicating Escr
 
 The below looks again at explanatory variables for fuel sources as levels OR shares. Each mean model incorporates AR(7) terms, hourly and monthly dummies. The volatility models incorporate log-ARCH(1) errors, hourly and monthly dummies, and an asymmetric leverage term.
 
+I am still checking all the notation...the below is not gospel (I am especially not sure about the leverage term!).
+
+\begin{align}
+W_{h,t} = \; & \alpha 
++ \underbrace{\sum_{k=1}^{7} \phi_k W_{h,t-k}}_{\text{AR(7)}}
++ \underbrace{\sum_{j \in \mathcal{J}} \beta_j x_{j,h,t}}_{\text{fundamentals (levels or shares)}}
+& + \underbrace{\sum_{d=2}^{7} \gamma_d D_{d,t} 
++ \sum_{s=2}^{12} \psi_s M_{s,t}}_{\text{hour & month dummies}}
++ \varepsilon_{h,t}
+\end{align}
+
+where $x_{j,h,t}$ is either $ln X_{j,h,t}$ (Model 1 — log-levels) or $s_{j,h,t}=\frac{X_{j,h,t}}{Load_{h,t}}$ (Model 2 — shares).
+
+\begin{align}
+\ln \sigma^2_{h,t} = \; & \omega
++ \underbrace{\alpha \ln \varepsilon^2_{h,t-1}}_{\text{log-ARCH(1)}}
++ \underbrace{\delta \cdot \mathbf{1}(\varepsilon_{h,t-1} < 0) \cdot \ln \varepsilon^2_{h,t-1}}_{\text{asymmetry/leverage}} \nonumber \\
+& + \underbrace{\sum_{d=2}^{7} \lambda_d D_{d,t} 
++ \sum_{s=2}^{12} \mu_s M_{s,t}}_{\text{hour \& month dummies in variance}}
+\end{align}
+
+where $1(\varepsilon_{h,t−1}<0)$ is an indicator function equal to 1 when the lagged error is negative. A significant $\delta$ indicates that negative shocks to price have a different effect on subsequent volatility than positive shocks of the same size.
+
 ##### Levels as Exp. Vars.
 
 ```{r, cache = TRUE,fig.height = 10, cache = TRUE}
