@@ -592,6 +592,7 @@ de_full <- de_all %>%
 #### (TBA) Economic Activity
 
 ### **Approaching a model...** {.tabset}
+#### Rintamaki et al. 2017 {.tabset}
 Below, I incorporate most explanatory variables (except solar and wind forecasts) above into models of the mean (not yet variance). The first model tab incorporates the variables simply as (log) levels whereas the second incorporates them as shares of total "load." In each tab, I run the model with the same set of regressors to be selected over but with or without a log.ewma argument. In line with Rintamaki et al, we incorporate moving average terms for half-day, daily, and weekly price volatility (levels?) via log.ewma argument (correct?). I need to think more closely about how that functions together with the hourly and monthly dummies. 
 
 **Note: log.ewma() for half-day, daily, and weekly price volatilities? Correct idea?**               
@@ -607,10 +608,10 @@ de_full %>% arrange(date_utc) %>% all.equal(de_full)
 ```
 
 
-#### Levels as Exp. Vars.
+##### Levels as Exp. Vars.
 ```{r, cache = TRUE,fig.height = 10, cache = TRUE}
 
-reg_mat <- as.matrix(select(de_full,
+lev_reg_mat <- as.matrix(select(de_full,
                                        'log_load', 
                                        #'log_gen_biomass_mw',
                                        'log_gen_gas_mw', 
@@ -644,14 +645,14 @@ reg_mat <- as.matrix(select(de_full,
 de_mod_levs <- arx(de_full$price_eur_m_whe, 
               # Question: In theory, the ARCH(24) would proxy the seasonal (daily) AR term?
               #arch = 1:24, 
-              mxreg = reg_mat)
+              mxreg = lev_reg_mat)
 
 de_mod_levs_logewma <- arx(de_full$price_eur_m_whe, 
               # As in Rintamaki et al. the below line incorporates moving average terms for the half-day (12), day (24 hours) and week (168 hours)  - correct?
               log.ewma = c(12, 24, 168),
               # Question: In theory, the ARCH(24) would proxy the seasonal (daily) AR term?
               #arch = 1:24, 
-              mxreg = reg_mat)
+              mxreg = lev_reg_mat)
 
 # model selection and plotting of residuals
 de_levs_sel <- getsm(de_mod_levs, ar.LjungB = NULL, arch.LjungB = NULL)
@@ -663,7 +664,7 @@ de_levs_sel_logewma %>% plot
 ```
 
 
-#### Shares as Exp. Vars.
+##### Shares as Exp. Vars.
 
 ```{r, fig.height = 10, warning = FALSE, cache = TRUE}
 
@@ -710,9 +711,53 @@ de_shares_sel_logewma %>% plot
 
 
 
+#### ARCH (Escribano et al. 2018) {.tabset}
+
+In this one, I get as close with built-in gets functionality to replicating Escribano & Sucarrat 2018 in which they incorporate GARCH(1,1), with periodic dummies, asymmetric leverage term, and correlated volatilities (? not sure if this is the right phrasing). 
+
+The below looks again at explanatory variables for fuel sources as levels OR shares. Each mean model incorporates AR(7) terms, hourly and monthly dummies. The volatility models incorporate log-ARCH(1) errors, hourly and monthly dummies, and an asymmetric leverage term.
+
+##### Levels as Exp. Vars.
+
+```{r, cache = TRUE,fig.height = 10, cache = TRUE}
+
+var_mat <- as.matrix(select(de_full, contains('hour'), 
+                                       contains('month')))
+
+de_mod_levs_arch <- arx(de_full$price_eur_m_whe, 
+              # Question: In theory, the ARCH(24) would proxy the seasonal (daily) AR term?
+              #arch = 1:24, 
+              ar = 1:7,
+              asym = 1,
+              arch = 1,
+              mxreg = lev_reg_mat, 
+              vxreg = var_mat)
+
+# model selection and plotting of residuals
+de_levs_sel <- getsm(de_mod_levs_arch, ar.LjungB = NULL, arch.LjungB = NULL)
+de_levs_sel %>% plot
+
+```
+
+##### Shares as Exp. Vars.
+
+```{r, cache = TRUE,fig.height = 10, cache = TRUE}
 
 
+de_mod_shares_arch <- arx(de_full$price_eur_m_whe, 
+              # Question: In theory, the ARCH(24) would proxy the seasonal (daily) AR term?
+              #arch = 1:24, 
+              ar = 1:7,
+              asym = 1,
+              arch = 1,
+              mxreg = reg_mat_shares,
+              vxreg = var_mat)
 
+# model selection and plotting of residuals
+de_levs_sel <- getsm(de_mod_levs_arch, ar.LjungB = NULL, arch.LjungB = NULL)
+de_levs_sel %>% plot
+
+```
 
 
 
