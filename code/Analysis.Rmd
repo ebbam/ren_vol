@@ -64,13 +64,14 @@ Data that remains to be integrated:
 Several data issues cropped up in the process. I note the most glaring issues in **bold** throughout this notebook. Notably, the main issues are:                     
 * the lower-frequency of certain candidate explanatory variables (ie. fuel and non-fuel commodity prices and redispatching costs)                              
 * missing data on net imports from France and Denmark in specific years (data exists but is not complete)               
-* how to aggregate the data on redispatching costs which are reported with hourly specificity but with different summarising metrics and "implementation horizons" (ie a load-balancing request made with a 4-hour implementation horizon). Fortunately, it does nto seem to be an issue of data availabilty but rather deeper thinking about what measure (and harmonisation across energy types) is most relevant for our ultimtate research question.                  
+* how to aggregate the data on redispatching costs which are reported with hourly specificity but with different summarising metrics and "implementation horizons" (ie a load-balancing request made with a 4-hour implementation horizon). Fortunately, it does not seem to be an issue of data availabilty but rather deeper thinking about what measure (and harmonisation across energy types) is most relevant for our ultimate research question.    
+* I have not log-transformed the price level as it has negative prices. 
 
 
 **Model Attempt:** Preliminary model attempt bringing this data together using gets under the "approaching a model..." tab.                      
 
 
-**Additional thoughts:** Though, ultimately, it would be very ineresting to broaden to a multi-country scope (especially if this might allow for some comparative analysis on variable country-specific shares of renewable electricity generation), we decided to focus on Germany as a first case to see how we go. If/when we take the step to further countries, any data that I pull from ENTSO-E has an accompanying scraping script that could (reasonably) easily be repurposed to pull the identical data on other countries.                            
+**Additional thoughts:** Though, ultimately, it would be very interesting to broaden to a multi-country scope (especially if this might allow for some comparative analysis on variable country-specific shares of renewable electricity generation), we decided to focus on Germany as a first case to see how we go. If/when we take the step to further countries, any data that I pull from ENTSO-E has an accompanying scraping script that could (reasonably) easily be repurposed to pull the identical data on other countries.                            
 
 
 ## **Start simple: Germany Only** {.tabset}
@@ -463,7 +464,8 @@ Four transmission system operators (TSOs) in Germany actively monitor the contra
 
 The plots below show the associated "redispatching work" by primary energy type (conventional, renewable, miscellaneous, and unspecified).        
 
-**Note: This information is also available from [ENTSO-E](https://transparency.entsoe.eu/congestion-management/r2/redispatching-internal/show). We might consider using this data source instead for consistency.**               
+**Note: This information is also available from [ENTSO-E](https://transparency.entsoe.eu/congestion-management/r2/redispatching-internal/show), however NETZTRANSPARENZ.DE handles the aggregation across the German TSOs. If we used ENTSOE we would have to figure out the aggregation ourselves.**           
+
 **Note: to summarise by time period, I use either the mean or sum total of the measure of "redispatching work in mwh." I am still not 100% sure what this means and whether this measure is most appropriate (or best summarised per hour as a sum or mean). We MUST revisit this data before implementation - NON-NEGOTIABLE.**
 
 ```{r, echo = FALSE, warning = FALSE, message = FALSE, fig.height = 8, fig.width = 12, echo = FALSE}
@@ -578,11 +580,12 @@ de_full <- de_all %>%
          # Create hourly and monthly dummies
         hour = as.factor(hour(datetime_local)),
          month = as.factor(month(datetime_local)),
+        weekday = weekdays(datetime_local),
         log_redisp_mwh = log(redisp_work_mwh + 1),
         log_PNGASEU = log(PNGASEU + 1),
         log_PALLFNF = log(PALLFNF + 1),
         log_PINDU = log(PINDU + 1)) %>% 
-  dummy_cols(select_columns = c("hour", "month"), remove_first_dummy = TRUE, remove_selected_columns = TRUE)
+  dummy_cols(select_columns = c("hour", "month", "weekday"), remove_first_dummy = TRUE, remove_selected_columns = TRUE)
 
 ```
 
@@ -611,6 +614,55 @@ de_full %>% arrange(date_utc) %>% all.equal(de_full)
 ##### Levels as Exp. Vars.
 ```{r, cache = TRUE,fig.height = 10, cache = TRUE}
 
+weekday_cols <- names(select(de_full, contains("weekday")))
+
+var_labels <- c(
+  "log_load"            = "Load (log)",
+  "log_gen_gas_mw"      = "Gas generation (log)",
+  "log_gen_coal_mw"     = "Coal generation (log)",
+  "log_gen_hydro_mw"    = "Hydro generation (log)",
+  "log_gen_geoth_mw"    = "Geothermal generation (log)",
+  "log_gen_nuclear_mw"  = "Nuclear generation (log)",
+  "log_gen_oth_ren_mw"  = "Other renewables (log)",
+  "log_gen_solar_mw"    = "Solar generation (log)",
+  "log_gen_wind_mw"     = "Wind generation (log)",
+  "log_PNGASEU"         = "Nat. Gas Price (NDL TTF) (log)",
+  "log_PALLFNF"         = "All Commodity Price Index (log)",
+  "log_PINDU"           = "Industrial Inputs Price Index (log)",
+  "net_imports_SE"      = "Net imports: SE",
+  "net_imports_PL"      = "Net imports: PL",
+  "net_imports_CZ"      = "Net imports: CZ",
+  "net_imports_BE"      = "Net imports: BE",
+  "net_imports_CH"      = "Net imports: CH",
+  "net_imports_NO"      = "Net imports: NO",
+  "net_imports_NL"      = "Net imports: NL",
+  "net_imports_LU"      = "Net imports: LU",
+  "net_imports_FR"      = "Net imports: FR",
+  "net_imports_DK"      = "Net imports: DK",
+  "net_imports_AT"      = "Net imports: AT",
+  "log_redisp_mwh"      = "Redispatch work (log)",
+   'shr_gen_gas_mw' = "Gas generation (share)",
+   'shr_gen_coal_mw' = "Coal generation (share)",
+   'shr_gen_hydro_mw' = "Hydro generation (share)",
+   'shr_gen_geoth_mw' = "Goethermal (share)", 
+   'shr_gen_nuclear_mw' = "Nuclear (share)", 
+   'shr_gen_oth_ren_mw' = "Other renewables (share)",
+   'shr_gen_solar_mw' = "Solar generation (share)",
+   'shr_gen_wind_mw' = "Wind generation (share)",
+   setNames(paste0("Hour 0", 1:9),  paste0("hour_", 1:9)),
+   setNames(paste0("Hour ", 10:24),  paste0("hour_", 10:24)),
+   setNames(month.name, paste0("month_", 1:12)),
+  setNames(str_remove(weekday_cols, "weekday_"), weekday_cols)
+)
+
+gen_var_labels <- function(reg_mat_, lab_list = var_labels){
+  ifelse(
+  colnames(reg_mat_) %in% names(lab_list),
+  var_labels[colnames(!reg_mat_)],
+  colnames(reg_mat_)) %>% 
+    return(.)
+}
+
 lev_reg_mat <- as.matrix(select(de_full,
                                        'log_load', 
                                        #'log_gen_biomass_mw',
@@ -627,6 +679,7 @@ lev_reg_mat <- as.matrix(select(de_full,
                                        'log_PINDU',
                                        contains('hour'), 
                                        contains('month'),
+                                       contains('weekday'),
                                        "net_imports_SE",
                                        "net_imports_PL",
                                        "net_imports_CZ",
@@ -641,6 +694,8 @@ lev_reg_mat <- as.matrix(select(de_full,
                                        "log_redisp_mwh"
                                        #"total_net_imports" # Excluded as its sum components are each of the net_imports above
                                        )) # 'gen_wind_mw' 'gen_coal_mw', 'gen_hydro_mw',
+
+colnames(lev_reg_mat) <- gen_var_labels(lev_reg_mat)
 
 de_mod_levs <- arx(de_full$price_eur_m_whe, 
               # Question: In theory, the ARCH(24) would proxy the seasonal (daily) AR term?
@@ -683,8 +738,12 @@ reg_mat_shares <- as.matrix(select(de_full,
                                        'log_PINDU',
                                        contains('hour'), 
                                        contains('month'),
+                                       contains('weekday'),
                                        "log_redisp_mwh",
                                        shr_net_imports)) # 'gen_wind_mw' 'gen_coal_mw', 'gen_hydro_mw',
+
+colnames(reg_mat_shares) <- gen_var_labels(reg_mat_shares)
+
 
 de_mod_shares <- arx(de_full$price_eur_m_whe, 
               mxreg = reg_mat_shares) 
