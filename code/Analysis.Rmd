@@ -456,82 +456,137 @@ fcast_sw %>%
 ```
 
 #### **Redispatching Costs**
+
+##### Overview
+
 Four transmission system operators (TSOs) in Germany actively monitor the contracted transmission of electricity in the grid to ensure load-balancing "in the event of imminent overloads in the electricity grid."                        
 
-"Redispatch is a request to adjust the active power feed-in of plants (conventional power plants, CHP plants, renewable energy plants, storage facilities) by the grid operator with the aim of avoiding or eliminating any bottlenecks that occur. This measure can be applied within and across control areas. By reducing the active power feed-in of one or more systems while simultaneously increasing the active power feed-in of one or more other systems, the total active power feed-in remains almost unchanged while at the same time relieving a bottleneck" ([NETZTRANSPARENZ.DE](https://www.netztransparenz.de/en/Ancillary-Services/System-operations/Redispatch])).
+"Redispatch is a request to adjust the active power feed-in of plants (conventional power plants, CHP plants, renewable energy plants, storage facilities) by the grid operator with the aim of avoiding or eliminating any bottlenecks that occur. This measure can be applied within and across control areas. By reducing the active power feed-in of one or more systems while simultaneously increasing the active power feed-in of one or more other systems, the total active power feed-in remains almost unchanged while at the same time relieving a bottleneck." ([NETZTRANSPARENZ.DE](https://www.netztransparenz.de/en/Ancillary-Services/System-operations/Redispatch])).
 
-([NETZTRANSPARENZ.DE](https://www.netztransparenz.de/en/Ancillary-Services/System-operations/Redispatch])) provide data on redispatch measures for the average, maximum, and per-quarter-hour(??) MW reduction. I think the latter is most relevant. See example at the link above.                
+*Note: This information is also available from [ENTSO-E](https://transparency.entsoe.eu/congestion-management/r2/redispatching-internal/show), however NETZTRANSPARENZ.DE handles the aggregation across the German TSOs. If we used ENTSOE we would have to figure out the aggregation ourselves. Therefore, I proceed with the Netztransparenz data.*   
 
-The plots below show the associated "redispatching work" by primary energy type (conventional, renewable, miscellaneous, and unspecified).        
+([NETZTRANSPARENZ.DE](https://www.netztransparenz.de/en/Ancillary-Services/System-operations/Redispatch])) provide data on redispatching for each individual requested measure/adjustment. Because these measures can be planned for implementation over more than a one-hour period, Netztransparenz provides three aggregated metrics per request (max MW power reduced or increased in any quarter-hour; average MW power reduced or increased per quarter-hour (excluding quarter-hours where no power was reduced or increased); and total work of the request in MWh). Because the MWh value is additive, this is the most useful and I proceed with this. We could consider using the max power as a measure of stress, but we would need to consider what time period to attribute it to, which is challenging for multi-hour or multi-quarter-hour implementation windows. For example, a redispatching measure spanning a 5-hour period would report a single max MW value reduced or increased per quarter-hour. However, this cannot be attributed to a precise quarter-hour or even hour. So we would have to be careful with it.
 
-**Note: This information is also available from [ENTSO-E](https://transparency.entsoe.eu/congestion-management/r2/redispatching-internal/show), however NETZTRANSPARENZ.DE handles the aggregation across the German TSOs. If we used ENTSOE we would have to figure out the aggregation ourselves.**           
+To arrive at "accurate" hourly observations, I summarise each mechanisms reported values by quarter-hour and hour:
 
-**Note: to summarise by time period, I use either the mean or sum total of the measure of "redispatching work in mwh." I am still not 100% sure what this means and whether this measure is most appropriate (or best summarised per hour as a sum or mean). We MUST revisit this data before implementation - NON-NEGOTIABLE.**
+1. I expand a single redispatching event into its quarter-hour windows from the reported start time to end time. Then, divide the event's total MWh by the number of quarters (total MWh/n_quarters) to get a quarter-hour MWh value.      
 
-```{r, echo = FALSE, warning = FALSE, message = FALSE, fig.height = 8, fig.width = 12, echo = FALSE}
+*Result:* Dataframe of redispatching work by quarter-hour.            
 
-redisp <- readRDS(here("data/raw/netztransparenz_redispatching_costs/prelim_redispatching_costs.RDS"))
+2. Convert each quarter hour to its hourly floor (21.15 -> 21.00), add the total MWh across the quarter hours. This conversion from expanded quarter-hour is required before going to hourly level as start and end times of redispatching events are not always reported at even hours. For example, applying MWh value from a 45-minute to a 1-hour period could lead to an over-estimation of total MWh.  
 
-p1 <- redisp %>% 
-  ggplot(aes(x = date, y = mean_work_mwh, color = primary_energy_type)) + 
+*Result:* Dataframe of redispatching work by hour.      
+
+##### Missing Data {.tabset}
+
+First, some notes on missing data. 
+
+###### Minor Issues
+
+I make some modifications/exclusions in the data after further investigation:
+
+- There are 109 observations where the reported start date is later than the end date of the redispatch measure. This is only recorded for “Conventional Energy Type”; between 2013-2017; and it does not uniformly coincide with any daylight savings times which might be able to be corrected. I therefore exclude these observations (0.09% of the total raw sample).       
+- Rename all “test” or “probe” items as “Probefahrt” as, following August 1, 2025, all tests were combined under the “Probefahrt” category. I first rename all tests prior to this date as "Probefahrt" just in case we wish to revisit this. Then, these items are excluded from the sample (3.3% of the total raw sample).       
+
+- In 27 cases, the redispatch reason is missing and reported as “NULL”. This occurs in 16 instances involving “Conventional Energy” and 11 instances where the “primary_energy_type” is not listed (NA). Only occurs in 2016 and 2017. I think that the “NULL” redispatch reason might be a misattributed NULL to items that were “tests” or “probefahrt” because they only occur in years where no tests are reported. In either case, if we exclude tests and NULL values, this should be fine. If we decide to include tests we should then reconsider this. Removing the NULL values excludes 0.023% of the total raw sample.       
+
+- In 77 cases, the primary energy type is not reported (NA). This occurs from 2016-2020, and again in 2024. Removes 0.065% of the total raw sample.        
+
+
+In total, these exclusions remove 3.5% of the original, raw sample. I think this is reasonable. The only thing to consider is whether we wish to include tests/probefahrter. The below table indicates how much data is removed for each year of the series.         
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE,  echo = FALSE, results = 'asis'}
+
+readRDS(here("data/raw/netztransparenz_redispatching_costs/missing_data_summary_table.RDS")) %>% 
+  kable(., caption = "Summary of Removed/Cleaned Observations")
+
+```
+
+
+###### Major Issue
+
+Another more consequential note on missing data. When aggregating, we rely on the "work_mwh" variable (total mwh work per redispatch measure). This value is missing for several observations, affecting ~20% of our sample which is a big chunk! The table below displays how many observations (individual redispatch measures) are removed from the raw sample because of a missing value for total work in MWh.
+
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE,  echo = FALSE, results = 'asis'}
+
+readRDS(here("data/raw/netztransparenz_redispatching_costs/missing_work_mwh_data_summary_table.RDS")) %>% 
+  kable(., caption = "Summary of Genuine Missing Summary Observations")
+
+```
+
+
+##### Data Presentation
+
+Finally, below I use the hourly series (excluding the missing data mentioned above and computed using the quarter-hourly disaggregation followed by hourly aggregation described above), to plot the data. The plots below show the associated "redispatching work" by primary energy type (conventional, renewable, and miscellaneous ("sonstiges")). The vertical line indicates the start of Redispatch 2.0, whereing RES plants were considered viable for redispatching action.           
+
+**Remaining questions: **            
+
+- By design, redispatching measures are meant to "reduce" and "increase" production symmetrically. We need to decide how to handle this. Report the highest, lowest, or mean of the absolute value of both/either (deally, the decrease and increase reported in each period should be identical in magnitude, but this is not always the case in the data. [Titz. et al 2024](https://doi.org/10.1016/j.apenergy.2023.122351) acknowledge the same challenge.)? Report total redispatching costs by energy type (net RES dispatch work, net conventional redispatch work)?     
+
+- Handle the ~20% missing values for the summarising variable (total MWH) of redispatching events. As noted in the second table above, we might be able to infer this from the "average MW" variable.         
+
+- All redispatching measures report a primary energy type (conventional, renewable, or miscellaneous). I do not know what "sonstiges" or "miscellaneous" includes in terms of the primary energy type. I tried having a look at the netztransparenz.de website and their glossary, but really struggled to find anything useful. Perhaps Jonas could have a look?
+
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE, fig.height = 8, fig.width = 12, echo = FALSE, results = 'asis'}
+
+df_summarised_hourly <- readRDS(here("data/raw/netztransparenz_redispatching_costs/redispatching_hourly.RDS"))
+
+p1 <- df_summarised_hourly %>% 
+  ggplot(aes(x = date, y = work_mwh, color = redispatch_direction)) + 
   geom_line() +
+  geom_vline(xintercept = as.Date("2021-10-01 00:00:00"), linetype = "dashed") +
   facet_wrap(~primary_energy_type) +
   theme_minimal() +
-  labs(x = "Date", y = "Redispatching Work (mwh)", title = "Average By Energy Type") +
+  labs(x = "Date", y = "Redispatching Work (mwh)", title = "Total MWh Redispatch By Energy Type and Direction", subtitle = "Dashed line represents launch of Redispatch 2.0 when RES plant curtailments were included in redispatching measures.") +
   theme(legend.position = "none")+
-    scale_color_brewer(palette = "Set2", na.value = "grey50")
+  scale_color_brewer(palette = "Set2", na.value = "grey50")
 
-
-p2 <- redisp %>% 
-  ggplot(aes(x = date, y = total_work_mwh, color = primary_energy_type)) + 
-  geom_line() +
-  facet_wrap(~primary_energy_type) +
-  theme_minimal() +
-  labs(x = "Date", y = "Redispatching Work (mwh)", title = "Total Sum By Energy Type") +
-  theme(legend.position = "none") +
-    scale_color_brewer(palette = "Set2", na.value = "grey50")
-
-p1 + p2
+p1
 
 plots <- list()
 for(unit in c("day", "week", "month", "year")){
   if(unit == "year"){
     pos = "bottom"
   }else{pos = "none"}
-  plots[[unit]] <- redisp %>%
-  mutate(day = floor_date(date, unit = unit)) %>% 
-  group_by(day, primary_energy_type) %>% 
-  summarise(total_work_mwh = sum(total_work_mwh, na.rm = TRUE)) %>% 
-  ggplot(aes(x = day, y = total_work_mwh, fill = primary_energy_type)) +
-  geom_area(position = "stack") +
-  theme_minimal() +
-  labs(
-    x = "Date",
-    y = "Redispatching Work (MWh)",
-    title = toupper(unit),
-    fill = "Primary Energy Type"
-  ) +
+  plots[[unit]] <- df_summarised_hourly %>%
+    mutate(day = floor_date(date, unit = unit)) %>% 
+    group_by(day, primary_energy_type) %>% 
+    summarise(reduce_work_mwh = sum(work_mwh*(redispatch_direction == "Reduce"), na.rm = TRUE),
+              increase_work_mwh = sum(work_mwh*(redispatch_direction != "Reduce"), na.rm = TRUE)) %>% 
+    ggplot(aes(x = day, fill = primary_energy_type)) +
+    geom_area(aes(y = reduce_work_mwh), position = "stack") +
+    geom_area(aes(y = increase_work_mwh), position = "stack") +
+    geom_vline(xintercept = as.Date("2021-10-01 00:00:00"), linetype = "dashed", color = "grey") +
+    geom_hline(yintercept = 0, linewidth = 0.5) +
+    theme_minimal() +
+    labs(
+      x = "Date",
+      y = "Redispatching Work (MWh)",
+      title = str_to_title(unit),
+      fill = "Primary Energy Type"
+    ) +
     theme(legend.position = pos) +
     scale_fill_brewer(palette = "Set2", na.value = "grey50")
 }
 
-grid.arrange(grobs = plots, top = "Total Redispatching Work by Primary Energy Type (Summarised for various intervals)")
+grid.arrange(grobs = plots, top = "Total Redispatching Work by Primary Energy Type (Summarised for various intervals)", 
+             bottom = "Dashed line represents launch of Redispatch 2.0 when RES plant curtailments were included in redispatching measures.")
 
-redisp_df <- redisp %>% 
-  group_by(date) %>% 
-  summarise(total_work_mwh = sum(total_work_mwh, na.rm = TRUE)) %>% 
-  ungroup %>% 
-  rename(date_utc = date,
-         redisp_work_mwh = total_work_mwh)
 
-redisp_df %>% 
-  ggplot(aes(x = date_utc, y = redisp_work_mwh)) +
+df_summarised_hourly %>% 
+  group_by(date, redispatch_direction) %>% 
+  summarise(work_mwh = sum(work_mwh, na.rm = TRUE)) %>% 
+  ggplot(aes(x = date, y = work_mwh, group = redispatch_direction)) +
+  geom_vline(xintercept = as.Date("2021-10-01 00:00:00"), linetype = "dashed", color = "grey") +
   geom_line() +
   theme_minimal() +
   labs(
     x = "Date",
     y = "Redispatching Work (MWh)",
-    title = "Redispatching Work (MWh) Total Across All Energy Types"
+    title = "Redispatching Work (MWh) Total Across All Energy Types",
+    subtitle = "Dashed line represents launch of Redispatch 2.0 when RES plant curtailments were included in redispatching measures."
   )
 
 ```
@@ -566,8 +621,8 @@ de_all <- de_hourly_prices %>%
   left_join(., imp_exp, by = "date_utc") %>% 
   mutate(across(contains("net_imports"), ~ifelse(is.na(.), 0, .)),
          shr_net_imports = total_net_imports/load) %>% 
-  left_join(., fcast_sw, by = "date_utc") %>% 
-  left_join(., redisp_df, by = "date_utc")
+  left_join(., fcast_sw, by = "date_utc") #%>% 
+  #left_join(., redisp_df, by = "date_utc")
 
 de_full <- de_all %>% 
   left_join(., ng_price, by = "date_utc") %>% 
@@ -576,12 +631,12 @@ de_full <- de_all %>%
   fill(PALLFNF, .direction = "down") %>% 
   fill(PINDU, .direction = "down") %>% 
   # Given our redispatching data covers the 2015-2024 time period, it is safe to assume that NA values are 0 values. Barring the data/metric choice issues outlined in the "Redispatching Costs" tab above, of course.
-  mutate(redisp_work_mwh = ifelse(is.na(redisp_work_mwh), 0, redisp_work_mwh),
+  mutate(#redisp_work_mwh = ifelse(is.na(redisp_work_mwh), 0, redisp_work_mwh),
          # Create hourly and monthly dummies
         hour = as.factor(hour(datetime_local)),
          month = as.factor(month(datetime_local)),
         weekday = weekdays(datetime_local),
-        log_redisp_mwh = log(redisp_work_mwh + 1),
+        #log_redisp_mwh = log(redisp_work_mwh + 1),
         log_PNGASEU = log(PNGASEU + 1),
         log_PALLFNF = log(PALLFNF + 1),
         log_PINDU = log(PINDU + 1)) %>% 
@@ -595,7 +650,16 @@ de_full <- de_all %>%
 #### (TBA) Economic Activity
 
 ### **Approaching a model...** {.tabset}
+
+Note that all level variables except net imports and prices are reported in logs. Net imports and prices should be converted but they contain negative values - not sure how to handle (sign(x)*abs(x)?).
+
+I include the following three commodity prices in the model selection for now (labels in model output in parentheses in italics):              
+* Natural Gas, Netherlands TTF Natural Gas Forward Day Ahead, US$ per Million Metric British Thermal Unit *(Gas Price)*                
+* Fuel & Non-Fuel Commodities: All Commodity Price Index, 2016 = 100, includes both Fuel and Non-Fuel Price Indices *(Commodity Ind)*     
+* Indust. Input Price: Industrial Inputs Price Index, 2016 = 100, includes Agricultural Raw Materials and Base Metals Price Indices *(Indust.Inp.Ind.)*         
+ 
 #### Rintamaki et al. 2017 {.tabset}
+
 Below, I incorporate most explanatory variables (except solar and wind forecasts) above into models of the mean (not yet variance). The first model tab incorporates the variables simply as (log) levels whereas the second incorporates them as shares of total "load." In each tab, I run the model with the same set of regressors to be selected over but with or without a log.ewma argument. In line with Rintamaki et al, we incorporate moving average terms for half-day, daily, and weekly price volatility (levels?) via log.ewma argument (correct?). I need to think more closely about how that functions together with the hourly and monthly dummies. 
 
 **Note: log.ewma() for half-day, daily, and weekly price volatilities? Correct idea?**               
@@ -612,23 +676,23 @@ de_full %>% arrange(date_utc) %>% all.equal(de_full)
 
 
 ##### Levels as Exp. Vars.
-```{r, cache = TRUE,fig.height = 10, cache = TRUE}
+```{r, fig.height = 10, cache = FALSE}
 
 weekday_cols <- names(select(de_full, contains("weekday")))
 
 var_labels <- c(
-  "log_load"            = "Load (log)",
-  "log_gen_gas_mw"      = "Gas generation (log)",
-  "log_gen_coal_mw"     = "Coal generation (log)",
-  "log_gen_hydro_mw"    = "Hydro generation (log)",
-  "log_gen_geoth_mw"    = "Geothermal generation (log)",
-  "log_gen_nuclear_mw"  = "Nuclear generation (log)",
-  "log_gen_oth_ren_mw"  = "Other renewables (log)",
-  "log_gen_solar_mw"    = "Solar generation (log)",
-  "log_gen_wind_mw"     = "Wind generation (log)",
-  "log_PNGASEU"         = "Nat. Gas Price (NDL TTF) (log)",
-  "log_PALLFNF"         = "All Commodity Price Index (log)",
-  "log_PINDU"           = "Industrial Inputs Price Index (log)",
+  "log_load"            = "Load",
+  "log_gen_gas_mw"      = "Gas gen.",
+  "log_gen_coal_mw"     = "Coal gen.",
+  "log_gen_hydro_mw"    = "Hydro gen.",
+  "log_gen_geoth_mw"    = "Geothermal gen.",
+  "log_gen_nuclear_mw"  = "Nuclear gen.",
+  "log_gen_oth_ren_mw"  = "Other renewbls",
+  "log_gen_solar_mw"    = "Solar gen.",
+  "log_gen_wind_mw"     = "Wind gen.",
+  "log_PNGASEU"         = "Gas Price",
+  "log_PALLFNF"         = "Commodity Ind.",
+  "log_PINDU"           = "Indust.Inp.Ind.",
   "net_imports_SE"      = "Net imports: SE",
   "net_imports_PL"      = "Net imports: PL",
   "net_imports_CZ"      = "Net imports: CZ",
@@ -640,15 +704,16 @@ var_labels <- c(
   "net_imports_FR"      = "Net imports: FR",
   "net_imports_DK"      = "Net imports: DK",
   "net_imports_AT"      = "Net imports: AT",
-  "log_redisp_mwh"      = "Redispatch work (log)",
-   'shr_gen_gas_mw' = "Gas generation (share)",
-   'shr_gen_coal_mw' = "Coal generation (share)",
-   'shr_gen_hydro_mw' = "Hydro generation (share)",
+  #"log_redisp_mwh"      = "Redispatch work",
+   'shr_gen_gas_mw' = "Gas gen. (share)",
+   'shr_gen_coal_mw' = "Coal gen. (share)",
+   'shr_gen_hydro_mw' = "Hydro gen. (share)",
    'shr_gen_geoth_mw' = "Goethermal (share)", 
    'shr_gen_nuclear_mw' = "Nuclear (share)", 
-   'shr_gen_oth_ren_mw' = "Other renewables (share)",
-   'shr_gen_solar_mw' = "Solar generation (share)",
-   'shr_gen_wind_mw' = "Wind generation (share)",
+   'shr_gen_oth_ren_mw' = "Other renewbls (share)",
+   'shr_gen_solar_mw' = "Solar gen. (share)",
+   'shr_gen_wind_mw' = "Wind gen. (share)",
+  'shr_net_imports' = "Net Imports (share)",
    setNames(paste0("Hour 0", 1:9),  paste0("hour_", 1:9)),
    setNames(paste0("Hour ", 10:24),  paste0("hour_", 10:24)),
    setNames(month.name, paste0("month_", 1:12)),
@@ -691,7 +756,7 @@ lev_reg_mat <- as.matrix(select(de_full,
                                        "net_imports_FR",
                                        "net_imports_DK",
                                        "net_imports_AT",
-                                       "log_redisp_mwh"
+                                       #"log_redisp_mwh"
                                        #"total_net_imports" # Excluded as its sum components are each of the net_imports above
                                        )) # 'gen_wind_mw' 'gen_coal_mw', 'gen_hydro_mw',
 
@@ -721,7 +786,7 @@ de_levs_sel_logewma %>% plot
 
 ##### Shares as Exp. Vars.
 
-```{r, fig.height = 10, warning = FALSE, cache = TRUE}
+```{r, fig.height = 10, warning = FALSE, cache = FALSE}
 
 reg_mat_shares <- as.matrix(select(de_full, 
                                        #'shr_gen_biomass_mw',  
@@ -739,7 +804,7 @@ reg_mat_shares <- as.matrix(select(de_full,
                                        contains('hour'), 
                                        contains('month'),
                                        contains('weekday'),
-                                       "log_redisp_mwh",
+                                       #"log_redisp_mwh",
                                        shr_net_imports)) # 'gen_wind_mw' 'gen_coal_mw', 'gen_hydro_mw',
 
 colnames(reg_mat_shares) <- gen_var_labels(reg_mat_shares)
@@ -758,7 +823,7 @@ de_shares_sel_logewma <- getsm(de_mod_shares_logewma, ar.LjungB = NULL, arch.Lju
 de_shares_sel_logewma %>% plot
 
 # # Perform gets model selection over the log-variance model above
-# de_vmod <- getsv(de_mod, t.pval = 0.001, ar.LjungB = NULL)
+# de_vmod <- getsv(de_mod, t.pval = 0.001, ar.LjungB = NULL)x
 # 
 # de_vmod %>% plot
 # 
@@ -801,7 +866,7 @@ where $1(\varepsilon_{h,t−1}<0)$ is an indicator function equal to 1 when the 
 
 ##### Levels as Exp. Vars.
 
-```{r, cache = TRUE,fig.height = 10, cache = TRUE}
+```{r, cache = TRUE,fig.height = 10, cache = FALSE}
 
 var_mat <- as.matrix(select(de_full, contains('hour'), 
                                        contains('month')))
@@ -823,7 +888,7 @@ de_levs_sel %>% plot
 
 ##### Shares as Exp. Vars.
 
-```{r, cache = TRUE,fig.height = 10, cache = TRUE}
+```{r, cache = TRUE,fig.height = 10, cache = FALSE}
 
 
 de_mod_shares_arch <- arx(de_full$price_eur_m_whe, 
@@ -836,7 +901,7 @@ de_mod_shares_arch <- arx(de_full$price_eur_m_whe,
               vxreg = var_mat)
 
 # model selection and plotting of residuals
-de_levs_sel <- getsm(de_mod_levs_arch, ar.LjungB = NULL, arch.LjungB = NULL)
+de_levs_sel <- getsm(de_mod_shares_arch, ar.LjungB = NULL, arch.LjungB = NULL)
 de_levs_sel %>% plot
 
 ```
