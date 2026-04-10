@@ -6,7 +6,7 @@ output:
   html_document: default
   pdf_document: default
 editor_options:
-  chunk_output_type: inline
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
@@ -64,8 +64,8 @@ Data that remains to be integrated:
 Several data issues cropped up in the process. I note the most glaring issues in **bold** throughout this notebook. Notably, the main issues are:                     
 * the lower-frequency of certain candidate explanatory variables (ie. fuel and non-fuel commodity prices and redispatching costs)                              
 * missing data on net imports from France and Denmark in specific years (data exists but is not complete)               
-* how to aggregate the data on redispatching costs which are reported with hourly specificity but with different summarising metrics and "implementation horizons" (ie a load-balancing request made with a 4-hour implementation horizon). Fortunately, it does not seem to be an issue of data availabilty but rather deeper thinking about what measure (and harmonisation across energy types) is most relevant for our ultimate research question.    
-* I have not log-transformed the price level as it has negative prices. 
+* we need to decide how to summarise redispatching costs correctly/appropriately. We have data on the negative and positive redispatching costs (in most cases, a postive redispatching request is offset via a negative redispatching request elsewhere.)           
+* I have not log-transformed the price level or net imports as they have negative values.             
 
 
 **Model Attempt:** Preliminary model attempt bringing this data together using gets under the "approaching a model..." tab.                      
@@ -87,16 +87,90 @@ de_hourly_prices <- read.csv(here('data/raw/EMBER_european_wholesale_electricity
   mutate(across(contains("datetime"), ~ymd_hms(.x))) %>% 
   filter(country == "Germany")
 
+# We are imposing certain dates for step shifts
+max_end_date <- max(de_hourly_prices$datetime_utc) + months(6) # This is just to make the line visible, does not affect the data itself. I use this as the end point of an "unended" step shift indicator.
+
+covid_start  <- as.Date("2020-03-22")
+covid_end <- as.Date("2022-03-20")
+ukraine_war_start <- as.Date("2022-02-24")
+ukraine_war_end <- max_end_date
+iran_war_start <- as.Date("2026-02-28")
+iran_war_end <- max_end_date
+
+# Label heights
+y_covid <- 900
+y_war <- 800
+y_iran <- 700
+
+tick <- 20   # height of the bracket's vertical ticks
+label_offset <- 30   # how far above the tick the label sits
+
 de_hourly_prices %>% 
   ggplot(aes(x = datetime_utc, y = price_eur_m_whe, color = "Raw Hourly Price")) +
   geom_line() +
   geom_ma(aes(color = "Monthly MA"), ma_fun = SMA, n = 731, linetype = "solid") + # Monthly moving average
-  geom_ma(aes(color = "Annual MA"), ma_fun = SMA, n = 8766, linetype = "solid") + # Annual moving average
+  geom_ma(aes(color = "Annual MA"), ma_fun = SMA, n = 8766, linetype = "solid") + # Annual moving average +
+  
+ # ── Germany Covid-19
+  # Source: https://www.dw.com/en/covid-how-germany-battles-the-pandemic-a-chronology/a-58026877
+  # March 22, 2020 - declaration of partial lockdown = including restritions to intl travel, schools and daycare centers closed, restaurants and cinemas closed. Source: https://link.springer.com/article/10.1186/s10194-021-01273-z
+  # Second wave: August 2020
+  # Third wave: January 6, 2021
+  # Fourth wave: June 2021
+  # End of restrictions - March 20, 2022 Source: https://apnews.com/article/coronavirus-pandemic-technology-health-europe-germany-debcbc0f99594ea9decd244070c28096
+  # Horizontal bar (creates the legend entry via aes color)
+  geom_segment(aes(color = "Germany Covid-19",
+               x = covid_start, xend = covid_end,
+               y = y_covid,     yend = y_covid)) +
+  # Left tick
+  geom_segment(color = "darkgreen",
+               aes(x = covid_start, xend = covid_start,
+               y = y_covid,     yend = y_covid - tick)) +
+  # Right tick
+  geom_segment(color = "darkgreen",
+               aes(x = covid_end, xend = covid_end,
+               y = y_covid,   yend = y_covid - tick)) +
+  # Centered label
+  annotate("text",
+           x     = covid_start + (covid_end - covid_start) / 2,
+           y     = y_covid + label_offset,
+           label = "Germany Covid-19",
+           hjust = 0.5, color = "darkgreen", size = 3) +
+
+  # ── Russia-Ukraine War
+  geom_segment(aes(color = "Russia-Ukraine War",
+               x = ukraine_war_start, xend = ukraine_war_end,
+               y = y_war,     yend = y_war)) +
+  geom_segment(color = "blue",
+               aes(x = ukraine_war_start, xend = ukraine_war_start,
+               y = y_war,     yend = y_war - tick)) +
+  annotate("text",
+           x     = mean(c(ukraine_war_end, ukraine_war_start)),
+           y     = y_war + label_offset,
+           label = "Russia-Ukraine War",
+           hjust = 0.5, color = "blue", size = 3) +
+
+  # ── Iran War
+  geom_segment(aes(color = "Iran War",
+               x = iran_war_start, xend = iran_war_end,
+               y = y_iran,     yend = y_iran)) +
+  geom_segment(color = "red",
+               aes(x = iran_war_start, xend = iran_war_start,
+               y = y_iran,     yend = y_iran - tick)) +
+  annotate("text",
+           x = mean(c(iran_war_end, iran_war_start)),
+           y     = y_iran + label_offset,
+           label = "Iran War",
+           hjust = 0.5, color = "red", size = 3) +
+
   scale_color_manual(
     name   = NULL,
-    values = c("Raw Hourly Price" = "grey", 
-               "Monthly MA"   = "purple", 
-               "Annual MA"    = "red")
+    values = c("Raw Hourly Price"    = "grey",
+               "Monthly MA"          = "purple",
+               "Annual MA"           = "orange",
+               "Germany Covid-19"    = "darkgreen",
+               "Russia-Ukraine War"  = "blue",
+               "Iran War"            = "red")
   ) +
   theme_minimal() + 
   labs(x = "Date", y = "Wholesale Electricity Price (Euro/MWh)", title = "Hourly Wholesale Electricity Prices in Germany (January 2015- December 2024)")
@@ -640,7 +714,10 @@ de_full <- de_all %>%
         log_PNGASEU = log(PNGASEU + 1),
         log_PALLFNF = log(PALLFNF + 1),
         log_PINDU = log(PINDU + 1)) %>% 
-  dummy_cols(select_columns = c("hour", "month", "weekday"), remove_first_dummy = TRUE, remove_selected_columns = TRUE)
+  dummy_cols(select_columns = c("hour", "month", "weekday"), remove_first_dummy = TRUE, remove_selected_columns = TRUE) %>% 
+  mutate(covid_ind = as.numeric(date_utc >= covid_start & date_utc < covid_end),
+         ukraine_ind = as.numeric(date_utc >= ukraine_war_start & date_utc < ukraine_war_end),
+         iran_ind = as.numeric(date_utc >= iran_war_end & date_utc < iran_war_end))
 
 ```
 
@@ -656,7 +733,9 @@ Note that all level variables except net imports and prices are reported in logs
 I include the following three commodity prices in the model selection for now (labels in model output in parentheses in italics):              
 * Natural Gas, Netherlands TTF Natural Gas Forward Day Ahead, US$ per Million Metric British Thermal Unit *(Gas Price)*                
 * Fuel & Non-Fuel Commodities: All Commodity Price Index, 2016 = 100, includes both Fuel and Non-Fuel Price Indices *(Commodity Ind)*     
-* Indust. Input Price: Industrial Inputs Price Index, 2016 = 100, includes Agricultural Raw Materials and Base Metals Price Indices *(Indust.Inp.Ind.)*         
+* Indust. Input Price: Industrial Inputs Price Index, 2016 = 100, includes Agricultural Raw Materials and Base Metals Price Indices *(Indust.Inp.Ind.)*       
+
+For each replication portion there are two levels of sub-tabs. First, whether the model is estimated using the level values of each relevant regressors (ie. wind, solar, fossil generation in log-mwh) or their shares of total generation in each hour. Second, for the Escribano et al. replication, I additionally include indicators for the Covid-19, Ukraine War, and Iran War periods (one tab "w.o. Indicators" and one tab "w. Indicators"). Note that for now, our time series is limited to a period prior to the attack on Iran, meaning that there is a warning of "singularity" for this regressor. It is dropped and does not affect the estimation, so I keep it (disregarding the warning) for when our time series extends longer.
  
 #### Rintamaki et al. 2017 {.tabset}
 
@@ -717,7 +796,10 @@ var_labels <- c(
    setNames(paste0("Hour 0", 1:9),  paste0("hour_", 1:9)),
    setNames(paste0("Hour ", 10:24),  paste0("hour_", 10:24)),
    setNames(month.name, paste0("month_", 1:12)),
-  setNames(str_remove(weekday_cols, "weekday_"), weekday_cols)
+  setNames(str_remove(weekday_cols, "weekday_"), weekday_cols),
+  "covid_ind" = "COVID-19",
+  "ukraine_ind" = "Ukraine War",
+  "iran_ind" = "Iran War"
 )
 
 gen_var_labels <- function(reg_mat_, lab_list = var_labels){
@@ -760,7 +842,44 @@ lev_reg_mat <- as.matrix(select(de_full,
                                        #"total_net_imports" # Excluded as its sum components are each of the net_imports above
                                        )) # 'gen_wind_mw' 'gen_coal_mw', 'gen_hydro_mw',
 
+lev_reg_mat_inds <- as.matrix(select(de_full,
+                                       'log_load', 
+                                       #'log_gen_biomass_mw',
+                                       'log_gen_gas_mw', 
+                                       'log_gen_coal_mw', 
+                                       'log_gen_hydro_mw',
+                                       'log_gen_geoth_mw', 
+                                       'log_gen_nuclear_mw', 
+                                       'log_gen_oth_ren_mw', 
+                                       'log_gen_solar_mw', 
+                                       'log_gen_wind_mw',
+                                       'log_PNGASEU', 
+                                       'log_PALLFNF',
+                                       'log_PINDU',
+                                       contains('hour'), 
+                                       contains('month'),
+                                       contains('weekday'),
+                                       "net_imports_SE",
+                                       "net_imports_PL",
+                                       "net_imports_CZ",
+                                       "net_imports_BE",
+                                       "net_imports_CH",
+                                       "net_imports_NO",
+                                       "net_imports_NL",
+                                       "net_imports_LU",
+                                       "net_imports_FR",
+                                       "net_imports_DK",
+                                       "net_imports_AT",
+                                "covid_ind",
+                                "ukraine_ind"
+                                #"iran_ind"
+                                       #"log_redisp_mwh"
+                                       #"total_net_imports" # Excluded as its sum components are each of the net_imports above
+                                       )) # 'gen_wind_mw' 'gen_coal_mw', 'gen_hydro_mw',
+
 colnames(lev_reg_mat) <- gen_var_labels(lev_reg_mat)
+colnames(lev_reg_mat_inds) <- gen_var_labels(lev_reg_mat_inds)
+
 
 de_mod_levs <- arx(de_full$price_eur_m_whe, 
               # Question: In theory, the ARCH(24) would proxy the seasonal (daily) AR term?
@@ -807,7 +926,31 @@ reg_mat_shares <- as.matrix(select(de_full,
                                        #"log_redisp_mwh",
                                        shr_net_imports)) # 'gen_wind_mw' 'gen_coal_mw', 'gen_hydro_mw',
 
+reg_mat_shares_inds <- as.matrix(select(de_full, 
+                                       #'shr_gen_biomass_mw',  
+                                       'shr_gen_gas_mw', 
+                                       'shr_gen_coal_mw',
+                                       'shr_gen_hydro_mw',
+                                       'shr_gen_geoth_mw', 
+                                       'shr_gen_nuclear_mw', 
+                                       'shr_gen_oth_ren_mw',
+                                       'shr_gen_solar_mw',
+                                       'shr_gen_wind_mw',
+                                       'log_PNGASEU',
+                                       'log_PALLFNF',
+                                       'log_PINDU',
+                                       contains('hour'), 
+                                       contains('month'),
+                                       contains('weekday'),
+                                       #"log_redisp_mwh",
+                                       shr_net_imports,
+                                       covid_ind,
+                                       ukraine_ind)) 
+                                       #iran_ind))
+
 colnames(reg_mat_shares) <- gen_var_labels(reg_mat_shares)
+colnames(reg_mat_shares_inds) <- gen_var_labels(reg_mat_shares_inds)
+
 
 
 de_mod_shares <- arx(de_full$price_eur_m_whe, 
@@ -864,7 +1007,9 @@ where $x_{j,h,t}$ is either $ln X_{j,h,t}$ (Model 1 — log-levels) or $s_{j,h,t
 
 where $1(\varepsilon_{h,t−1}<0)$ is an indicator function equal to 1 when the lagged error is negative. A significant $\delta$ indicates that negative shocks to price have a different effect on subsequent volatility than positive shocks of the same size.
 
-##### Levels as Exp. Vars.
+##### Levels as Exp. Vars. {.tabset}
+
+###### w.o. Indicators
 
 ```{r, cache = TRUE,fig.height = 10, cache = FALSE}
 
@@ -886,10 +1031,35 @@ de_levs_sel %>% plot
 
 ```
 
-##### Shares as Exp. Vars.
+
+###### w. Indicators
 
 ```{r, cache = TRUE,fig.height = 10, cache = FALSE}
 
+var_mat_inds <- as.matrix(select(de_full, "covid_ind", "ukraine_ind", #"iran_ind", 
+                            contains('hour'), 
+                                       contains('month')))
+
+de_mod_levs_arch_inds <- arx(de_full$price_eur_m_whe, 
+              # Question: In theory, the ARCH(24) would proxy the seasonal (daily) AR term?
+              #arch = 1:24, 
+              ar = 1:7,
+              asym = 1,
+              arch = 1,
+              mxreg = lev_reg_mat_inds, 
+              vxreg = var_mat_inds)
+
+# model selection and plotting of residuals
+de_levs_sel_inds <- getsm(de_mod_levs_arch_inds, ar.LjungB = NULL, arch.LjungB = NULL)
+de_levs_sel_inds %>% plot
+
+```
+
+##### Shares as Exp. Vars. {.tabset}
+
+###### w.o. Indicators
+
+```{r, cache = TRUE,fig.height = 10, cache = FALSE}
 
 de_mod_shares_arch <- arx(de_full$price_eur_m_whe, 
               # Question: In theory, the ARCH(24) would proxy the seasonal (daily) AR term?
@@ -901,11 +1071,29 @@ de_mod_shares_arch <- arx(de_full$price_eur_m_whe,
               vxreg = var_mat)
 
 # model selection and plotting of residuals
-de_levs_sel <- getsm(de_mod_shares_arch, ar.LjungB = NULL, arch.LjungB = NULL)
-de_levs_sel %>% plot
+de_shares_sel <- getsm(de_mod_shares_arch, ar.LjungB = NULL, arch.LjungB = NULL)
+de_shares_sel %>% plot
 
 ```
 
+###### w. Indicators
+
+```{r, cache = TRUE,fig.height = 10, cache = FALSE}
+
+de_mod_shares_arch_inds <- arx(de_full$price_eur_m_whe, 
+              # Question: In theory, the ARCH(24) would proxy the seasonal (daily) AR term?
+              #arch = 1:24, 
+              ar = 1:7,
+              asym = 1,
+              arch = 1,
+              mxreg = reg_mat_shares_inds,
+              vxreg = var_mat_inds)
+
+# model selection and plotting of residuals
+de_shares_sel_inds <- getsm(de_mod_shares_arch_inds, ar.LjungB = NULL, arch.LjungB = NULL)
+de_shares_sel_inds %>% plot
+
+```
 
 
 
