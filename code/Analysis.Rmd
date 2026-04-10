@@ -34,15 +34,15 @@ source(here("code/rintamaki_replication/models/helper_code.R"))
 
 # Overview {.tabset}
 
-**Motivation:** Recall our motivation originally stemming from an interest in the "relative" volatility of fossil fuel versus renewable prices. After repeated discussion regarding the comparability of the two types of energy sources and scoping of the data available we pivoted to questions more directly related to "explaining"/investigating the recent spike in electricity prices (both in level and volatility) following a surge in natural gas prices and the Russian invasion of Ukraine and how it might have been mediated (or not) by increased renewable energy generation.
+<!-- **Motivation:** Recall our motivation originally stemming from an interest in the "relative" volatility of fossil fuel versus renewable prices. After repeated discussion regarding the comparability of the two types of energy sources and scoping of the data available we pivoted to questions more directly related to "explaining"/investigating the recent spike in electricity prices (both in level and volatility) following a surge in natural gas prices and the Russian invasion of Ukraine and how it might have been mediated (or not) by increased renewable energy generation. -->
 
 
-**RQs:** Though still to be workshopped, potential guiding questions along these lines (most follow from our past conversations):               
-1. To what extent, if any, does increased reliance on renewable sources of electricity insulate consumers or industry from the effects of spikes in electricity price inputs (ie. natural gas spike post-Ukraine)?               
-2. What are the costs (to electricity consumers - industrial and/or household) of recent increased price volatility and to what extent is greater renewable energy as a share of generating capacity a mediating or aggravating force?              
-3. Setting the price is an economic question - how efficiently does the market translate the true cost into price signals (ie. shifting share to lower cost renewables not yet filtering into price signals due to marginal price-setting in the market)?                  
-4. What is the potential efficiency gain of switching to renewables even if it is not yet translated into prices?                  
-5. Exogenous: use the connection of large wind or solar connections to the grid as plausible exogenous variation. See if there have been changes in capacity and whether they had any detectable effect on prices, all else equal.                  
+<!-- **RQs:** Though still to be workshopped, potential guiding questions along these lines (most follow from our past conversations):                -->
+<!-- 1. To what extent, if any, does increased reliance on renewable sources of electricity insulate consumers or industry from the effects of spikes in electricity price inputs (ie. natural gas spike post-Ukraine)?                -->
+<!-- 2. What are the costs (to electricity consumers - industrial and/or household) of recent increased price volatility and to what extent is greater renewable energy as a share of generating capacity a mediating or aggravating force?               -->
+<!-- 3. Setting the price is an economic question - how efficiently does the market translate the true cost into price signals (ie. shifting share to lower cost renewables not yet filtering into price signals due to marginal price-setting in the market)?                   -->
+<!-- 4. What is the potential efficiency gain of switching to renewables even if it is not yet translated into prices?                   -->
+<!-- 5. Exogenous: use the connection of large wind or solar connections to the grid as plausible exogenous variation. See if there have been changes in capacity and whether they had any detectable effect on prices, all else equal.                   -->
 
 
 
@@ -65,7 +65,7 @@ Several data issues cropped up in the process. I note the most glaring issues in
 * the lower-frequency of certain candidate explanatory variables (ie. fuel and non-fuel commodity prices and redispatching costs)                              
 * missing data on net imports from France and Denmark in specific years (data exists but is not complete)               
 * we need to decide how to summarise redispatching costs correctly/appropriately. We have data on the negative and positive redispatching costs (in most cases, a postive redispatching request is offset via a negative redispatching request elsewhere.)           
-* I have not log-transformed the price level or net imports as they have negative values.             
+* I have not log-transformed the price level or net imports as they have negative values. We should decided how to log-transform them.             
 
 
 **Model Attempt:** Preliminary model attempt bringing this data together using gets under the "approaching a model..." tab.                      
@@ -77,7 +77,7 @@ Several data issues cropped up in the process. I note the most glaring issues in
 ## **Start simple: Germany Only** {.tabset}
 ### **Data** {.tabset}
 
-Using data from [EMBER](https://ember-energy.org/data/european-wholesale-electricity-price-data/) on European wholesale electricity prices (hourly - daily and monthly also exist). The hourly prices are the day-ahead wholesale prices in Germany.
+Using data from [EMBER](https://ember-energy.org/data/european-wholesale-electricity-price-data/) on European wholesale electricity prices (hourly - daily and monthly also exist). The hourly prices are the day-ahead wholesale prices in Germany. This now includes labels for the Covid-19 period, Russia-Ukraine War, and Iran War. The Covid-19 indicator spans from March 22, 2020 (Germany's first declared lockdown) - March 20, 2022 (end of all restrictions). This endpoint should likely be a little earlier as the repeal of restrictions followed a "return to normalcy". Alternatively, we could also link this to the four waves (Second wave: start August 2020; Third wave: start January 6, 2021; Fourth wave: start June 2021) finding reasonable end points for each. The Ukraine and Iran wars starts from the day of the first invasion/attack.
 
 ```{r, echo = FALSE, fig.height = 8, fig.width = 12, warning = FALSE, cache = TRUE}
 
@@ -283,8 +283,8 @@ The commodity prices listed below are:
 **Note: These are MONTHLY values. I fill these values to hourly when merging the data later on.**
 
 I include the following three commodity prices in the model selection for now (final plot in this section):              
-* Natural Gas, Netherlands TTF Natural Gas Forward Day Ahead, US$ per Million Metric British Thermal Unit                
-* Fuel & Non-Fuel Commodities: All Commodity Price Index, 2016 = 100, includes both Fuel and Non-Fuel Price Indices              
+* Natural Gas Price, Netherlands TTF Natural Gas Forward Day Ahead, US$ per Million Metric British Thermal Unit                
+* Fuel & Non-Fuel Commodities Price Index: All Commodity Price Index, 2016 = 100, includes both Fuel and Non-Fuel Price Indices              
 * Indust. Input Price: Industrial Inputs Price Index, 2016 = 100, includes Agricultural Raw Materials and Base Metals Price Indices       
 
 **Note: We should probably rethink the non-natural gas prices (the latter two indices). The two latter indices are global indices and given the industrial structure of Germany we might want to consider a Producer Price Index for Germany specifically, assuming that exists? Additionally, as you can see in the graph, the latter two essentially trace each other/collinearity issues.**
@@ -731,11 +731,11 @@ de_full <- de_all %>%
 Note that all level variables except net imports and prices are reported in logs. Net imports and prices should be converted but they contain negative values - not sure how to handle (sign(x)*abs(x)?).
 
 I include the following three commodity prices in the model selection for now (labels in model output in parentheses in italics):              
-* Natural Gas, Netherlands TTF Natural Gas Forward Day Ahead, US$ per Million Metric British Thermal Unit *(Gas Price)*                
-* Fuel & Non-Fuel Commodities: All Commodity Price Index, 2016 = 100, includes both Fuel and Non-Fuel Price Indices *(Commodity Ind)*     
-* Indust. Input Price: Industrial Inputs Price Index, 2016 = 100, includes Agricultural Raw Materials and Base Metals Price Indices *(Indust.Inp.Ind.)*       
+* Natural Gas Price: Netherlands TTF Natural Gas Forward Day Ahead, US$ per Million Metric British Thermal Unit *(Gas Price)*                
+* Fuel & Non-Fuel Commodities Prices: All Commodity Price Index, 2016 = 100, includes both Fuel and Non-Fuel Price Indices. Note: this one might be problematic because it already includes fuel prices? *(Commodity Ind)*     
+* Industrial Input Price: Industrial Inputs Price Index, 2016 = 100, includes Agricultural Raw Materials and Base Metals Price Indices *(Indust.Inp.Ind.)*       
 
-For each replication portion there are two levels of sub-tabs. First, whether the model is estimated using the level values of each relevant regressors (ie. wind, solar, fossil generation in log-mwh) or their shares of total generation in each hour. Second, for the Escribano et al. replication, I additionally include indicators for the Covid-19, Ukraine War, and Iran War periods (one tab "w.o. Indicators" and one tab "w. Indicators"). Note that for now, our time series is limited to a period prior to the attack on Iran, meaning that there is a warning of "singularity" for this regressor. It is dropped and does not affect the estimation, so I keep it (disregarding the warning) for when our time series extends longer.
+For each replication portion there are two levels of sub-tabs. First, whether the model is estimated using the *level* values of each relevant regressor (ie. wind, solar, fossil generation in log-mwh) or their *shares* (labelled "sh" in the regression output) of total generation in each hour. Second, for the Escribano et al. replication, I additionally include indicators for the Covid-19, Ukraine War, and Iran War periods (one tab "w.o. Indicators" and one tab "w. Indicators"). Note that for now, our time series is limited to a period prior to the attack on Iran, meaning that there is a warning of "singularity" for this regressor. It is dropped and does not affect the estimation, so I keep it (disregarding the warning) for when our time series extends longer.
  
 #### Rintamaki et al. 2017 {.tabset}
 
@@ -784,15 +784,15 @@ var_labels <- c(
   "net_imports_DK"      = "Net imports: DK",
   "net_imports_AT"      = "Net imports: AT",
   #"log_redisp_mwh"      = "Redispatch work",
-   'shr_gen_gas_mw' = "Gas gen. (share)",
-   'shr_gen_coal_mw' = "Coal gen. (share)",
-   'shr_gen_hydro_mw' = "Hydro gen. (share)",
-   'shr_gen_geoth_mw' = "Goethermal (share)", 
-   'shr_gen_nuclear_mw' = "Nuclear (share)", 
-   'shr_gen_oth_ren_mw' = "Other renewbls (share)",
-   'shr_gen_solar_mw' = "Solar gen. (share)",
-   'shr_gen_wind_mw' = "Wind gen. (share)",
-  'shr_net_imports' = "Net Imports (share)",
+   'shr_gen_gas_mw' = "Gas gen (sh)",
+   'shr_gen_coal_mw' = "Coal gen (sh)",
+   'shr_gen_hydro_mw' = "Hydro gen (sh)",
+   'shr_gen_geoth_mw' = "Goethermal (sh)", 
+   'shr_gen_nuclear_mw' = "Nuclear (sh)", 
+   'shr_gen_oth_ren_mw' = "Other renew (sh)",
+   'shr_gen_solar_mw' = "Solar gen (sh)",
+   'shr_gen_wind_mw' = "Wind gen (sh)",
+  'shr_net_imports' = "Net Imprts (sh)",
    setNames(paste0("Hour 0", 1:9),  paste0("hour_", 1:9)),
    setNames(paste0("Hour ", 10:24),  paste0("hour_", 10:24)),
    setNames(month.name, paste0("month_", 1:12)),
@@ -803,6 +803,7 @@ var_labels <- c(
 )
 
 gen_var_labels <- function(reg_mat_, lab_list = var_labels){
+  # Renames only those labels that have a value in the lookup list - avoids an error on variable names that are not found in the lookup list
   ifelse(
   colnames(reg_mat_) %in% names(lab_list),
   var_labels[colnames(!reg_mat_)],
@@ -842,6 +843,129 @@ lev_reg_mat <- as.matrix(select(de_full,
                                        #"total_net_imports" # Excluded as its sum components are each of the net_imports above
                                        )) # 'gen_wind_mw' 'gen_coal_mw', 'gen_hydro_mw',
 
+colnames(lev_reg_mat) <- gen_var_labels(lev_reg_mat)
+
+rint_de_mod_levs <- arx(de_full$price_eur_m_whe, 
+              # Question: In theory, the ARCH(24) would proxy the seasonal (daily) AR term?
+              #arch = 1:24, 
+              mxreg = lev_reg_mat)
+
+rint_de_mod_levs_logewma <- arx(de_full$price_eur_m_whe, 
+              # As in Rintamaki et al. the below line incorporates moving average terms for the half-day (12), day (24 hours) and week (168 hours)  - correct?
+              log.ewma = c(12, 24, 168),
+              # Question: In theory, the ARCH(24) would proxy the seasonal (daily) AR term?
+              #arch = 1:24, 
+              mxreg = lev_reg_mat)
+
+# model selection and plotting of residuals
+rint_de_levs_sel <- getsm(rint_de_mod_levs, ar.LjungB = NULL, arch.LjungB = NULL)
+rint_de_levs_sel %>% plot
+
+rint_de_levs_sel_logewma <- getsm(rint_de_mod_levs_logewma, ar.LjungB = NULL, arch.LjungB = NULL)
+rint_de_levs_sel_logewma %>% plot
+
+```
+
+
+##### Shares as Exp. Vars.
+
+```{r, fig.height = 10, warning = FALSE, cache = FALSE}
+
+reg_mat_shares <- as.matrix(select(de_full, 
+                                       #'shr_gen_biomass_mw',  
+                                       'shr_gen_gas_mw', 
+                                       'shr_gen_coal_mw',
+                                       'shr_gen_hydro_mw',
+                                       'shr_gen_geoth_mw', 
+                                       'shr_gen_nuclear_mw', 
+                                       'shr_gen_oth_ren_mw',
+                                       'shr_gen_solar_mw',
+                                       'shr_gen_wind_mw',
+                                       'log_PNGASEU',
+                                       'log_PALLFNF',
+                                       'log_PINDU',
+                                       contains('hour'), 
+                                       contains('month'),
+                                       contains('weekday'),
+                                       #"log_redisp_mwh",
+                                       shr_net_imports)) # 'gen_wind_mw' 'gen_coal_mw', 'gen_hydro_mw',
+
+colnames(reg_mat_shares) <- gen_var_labels(reg_mat_shares)
+
+rint_de_mod_shares <- arx(de_full$price_eur_m_whe, 
+              mxreg = reg_mat_shares) 
+
+rint_de_mod_shares_logewma <- arx(de_full$price_eur_m_whe, 
+                     log.ewma = c(12, 24, 168),
+                     mxreg = reg_mat_shares) 
+
+rint_de_shares_sel <- getsm(rint_de_mod_shares, ar.LjungB = NULL, arch.LjungB = NULL)
+rint_de_shares_sel %>% plot
+rint_de_shares_sel_logewma <- getsm(rint_de_mod_shares_logewma, ar.LjungB = NULL, arch.LjungB = NULL)
+rint_de_shares_sel_logewma %>% plot
+
+```
+
+
+
+#### ARCH (Escribano et al. 2018) {.tabset}
+
+In this one, I get as close with built-in gets functionality to replicating Escribano & Sucarrat 2018 in which they incorporate GARCH(1,1), with periodic dummies, asymmetric leverage term, and correlated volatilities (? not sure if this is the right phrasing). I do not include their described "volatility feedback" parameters in the log-variance equation, as we do not estimate the model as individual hourly series but rather as a sequential hourly time series. 
+
+The below looks again at explanatory variables for fuel sources as levels OR shares. Each mean model incorporates AR(7) terms, hourly and monthly dummies. The volatility models incorporate log-ARCH(1) errors, hourly and monthly dummies, and an asymmetric leverage term.
+
+I believe the below is the correct notation now, where W represents the wholesale hourly electricity price. First, the mean model: 
+
+\begin{align}
+W_{h,t} = \; & \alpha 
++ \underbrace{\sum_{k=1}^{7} \phi_k W_{h,t-k}}_{\text{AR(7)}}
++ \underbrace{\sum_{j \in \mathcal{J}} \beta_j x_{j,h,t}}_{\text{fundamentals (levels or shares)}}
+& + \underbrace{\sum_{d=2}^{7} \gamma_d D_{d,t} 
++ \sum_{s=2}^{12} \psi_s M_{s,t}}_{\text{hour & month dummies}}
++ \varepsilon_{h,t}
+\end{align}
+
+where $x_{j,h,t}$ is either $ln X_{j,h,t}$ (Model 1 — log-levels) or $s_{j,h,t}=\frac{X_{j,h,t}}{Load_{h,t}}$ (Model 2 — shares).
+
+Second, the model of the log-variance:
+
+\begin{align}
+\ln \sigma^2_{h,t} = \; & \omega
++ \underbrace{\alpha \ln \varepsilon^2_{h,t-1}}_{\text{log-ARCH(1)}}
++ \underbrace{\delta \cdot \mathbf{1}(\varepsilon_{h,t-1} < 0) \cdot \ln \varepsilon^2_{h,t-1}}_{\text{asymmetric leverage term}} \nonumber \\
+& + \underbrace{\sum_{d=2}^{7} \lambda_d D_{d,t} 
++ \sum_{s=2}^{12} \mu_s M_{s,t}}_{\text{hour & month dummies in variance}}
+\end{align}
+
+where $1(\varepsilon_{h,t−1}<0)$ is an indicator function equal to 1 when the lagged error is negative. A significant $\delta$ indicates that negative shocks to price have a different effect on subsequent volatility than positive shocks of the same size.
+
+##### Levels as Exp. Vars. {.tabset}
+
+###### w.o. Indicators
+
+```{r, fig.height = 10, cache = FALSE}
+
+var_mat <- as.matrix(select(de_full, contains('hour'), 
+                                       contains('month')))
+
+esc_de_mod_levs_arch <- arx(de_full$price_eur_m_whe, 
+              ar = 1:7,
+              asym = 1,
+              arch = 1,
+              mxreg = lev_reg_mat, 
+              vxreg = var_mat)
+
+# model selection and plotting of residuals
+esc_de_levs_sel <- getsm(esc_de_mod_levs_arch, ar.LjungB = NULL, arch.LjungB = NULL)
+esc_de_levs_sel %>% plot
+
+```
+
+
+###### w. Indicators
+
+```{r, fig.height = 10, cache = FALSE}
+
 lev_reg_mat_inds <- as.matrix(select(de_full,
                                        'log_load', 
                                        #'log_gen_biomass_mw',
@@ -877,54 +1001,50 @@ lev_reg_mat_inds <- as.matrix(select(de_full,
                                        #"total_net_imports" # Excluded as its sum components are each of the net_imports above
                                        )) # 'gen_wind_mw' 'gen_coal_mw', 'gen_hydro_mw',
 
-colnames(lev_reg_mat) <- gen_var_labels(lev_reg_mat)
 colnames(lev_reg_mat_inds) <- gen_var_labels(lev_reg_mat_inds)
 
 
-de_mod_levs <- arx(de_full$price_eur_m_whe, 
-              # Question: In theory, the ARCH(24) would proxy the seasonal (daily) AR term?
-              #arch = 1:24, 
-              mxreg = lev_reg_mat)
+var_mat_inds <- as.matrix(select(de_full, "covid_ind", "ukraine_ind", #"iran_ind", 
+                            contains('hour'), 
+                                       contains('month')))
 
-de_mod_levs_logewma <- arx(de_full$price_eur_m_whe, 
-              # As in Rintamaki et al. the below line incorporates moving average terms for the half-day (12), day (24 hours) and week (168 hours)  - correct?
-              log.ewma = c(12, 24, 168),
-              # Question: In theory, the ARCH(24) would proxy the seasonal (daily) AR term?
-              #arch = 1:24, 
-              mxreg = lev_reg_mat)
+esc_de_mod_levs_arch_inds <- arx(de_full$price_eur_m_whe, 
+              ar = 1:7,
+              asym = 1,
+              arch = 1,
+              mxreg = lev_reg_mat_inds, 
+              vxreg = var_mat_inds)
 
 # model selection and plotting of residuals
-de_levs_sel <- getsm(de_mod_levs, ar.LjungB = NULL, arch.LjungB = NULL)
-de_levs_sel %>% plot
-
-de_levs_sel_logewma <- getsm(de_mod_levs_logewma, ar.LjungB = NULL, arch.LjungB = NULL)
-de_levs_sel_logewma %>% plot
+esc_de_levs_sel_inds <- getsm(esc_de_mod_levs_arch_inds, ar.LjungB = NULL, arch.LjungB = NULL)
+esc_de_levs_sel_inds %>% plot
 
 ```
 
+##### Shares as Exp. Vars. {.tabset}
 
-##### Shares as Exp. Vars.
+###### w.o. Indicators
 
-```{r, fig.height = 10, warning = FALSE, cache = FALSE}
+```{r, fig.height = 10, cache = FALSE}
 
-reg_mat_shares <- as.matrix(select(de_full, 
-                                       #'shr_gen_biomass_mw',  
-                                       'shr_gen_gas_mw', 
-                                       'shr_gen_coal_mw',
-                                       'shr_gen_hydro_mw',
-                                       'shr_gen_geoth_mw', 
-                                       'shr_gen_nuclear_mw', 
-                                       'shr_gen_oth_ren_mw',
-                                       'shr_gen_solar_mw',
-                                       'shr_gen_wind_mw',
-                                       'log_PNGASEU',
-                                       'log_PALLFNF',
-                                       'log_PINDU',
-                                       contains('hour'), 
-                                       contains('month'),
-                                       contains('weekday'),
-                                       #"log_redisp_mwh",
-                                       shr_net_imports)) # 'gen_wind_mw' 'gen_coal_mw', 'gen_hydro_mw',
+esc_de_mod_shares_arch <- arx(de_full$price_eur_m_whe, 
+              # Question: In theory, the ARCH(24) would proxy the seasonal (daily) AR term?
+              #arch = 1:24, 
+              ar = 1:7,
+              asym = 1,
+              arch = 1,
+              mxreg = reg_mat_shares,
+              vxreg = var_mat)
+
+# model selection and plotting of residuals
+esc_de_shares_sel <- getsm(esc_de_mod_shares_arch, ar.LjungB = NULL, arch.LjungB = NULL)
+esc_de_shares_sel %>% plot
+
+```
+
+###### w. Indicators
+
+```{r, fig.height = 10, cache = FALSE}
 
 reg_mat_shares_inds <- as.matrix(select(de_full, 
                                        #'shr_gen_biomass_mw',  
@@ -948,139 +1068,9 @@ reg_mat_shares_inds <- as.matrix(select(de_full,
                                        ukraine_ind)) 
                                        #iran_ind))
 
-colnames(reg_mat_shares) <- gen_var_labels(reg_mat_shares)
 colnames(reg_mat_shares_inds) <- gen_var_labels(reg_mat_shares_inds)
 
-
-
-de_mod_shares <- arx(de_full$price_eur_m_whe, 
-              mxreg = reg_mat_shares) 
-
-de_mod_shares_logewma <- arx(de_full$price_eur_m_whe, 
-                     log.ewma = c(12, 24, 168),
-                     mxreg = reg_mat_shares) 
-
-de_shares_sel <- getsm(de_mod_shares, ar.LjungB = NULL, arch.LjungB = NULL)
-de_shares_sel %>% plot
-de_shares_sel_logewma <- getsm(de_mod_shares_logewma, ar.LjungB = NULL, arch.LjungB = NULL)
-de_shares_sel_logewma %>% plot
-
-# # Perform gets model selection over the log-variance model above
-# de_vmod <- getsv(de_mod, t.pval = 0.001, ar.LjungB = NULL)x
-# 
-# de_vmod %>% plot
-# 
-# data_de %>% filter(de_price < 0)
-
-```
-
-
-
-
-
-#### ARCH (Escribano et al. 2018) {.tabset}
-
-In this one, I get as close with built-in gets functionality to replicating Escribano & Sucarrat 2018 in which they incorporate GARCH(1,1), with periodic dummies, asymmetric leverage term, and correlated volatilities (? not sure if this is the right phrasing). 
-
-The below looks again at explanatory variables for fuel sources as levels OR shares. Each mean model incorporates AR(7) terms, hourly and monthly dummies. The volatility models incorporate log-ARCH(1) errors, hourly and monthly dummies, and an asymmetric leverage term.
-
-I am still checking all the notation...the below is not gospel (I am especially not sure about the leverage term!).
-
-\begin{align}
-W_{h,t} = \; & \alpha 
-+ \underbrace{\sum_{k=1}^{7} \phi_k W_{h,t-k}}_{\text{AR(7)}}
-+ \underbrace{\sum_{j \in \mathcal{J}} \beta_j x_{j,h,t}}_{\text{fundamentals (levels or shares)}}
-& + \underbrace{\sum_{d=2}^{7} \gamma_d D_{d,t} 
-+ \sum_{s=2}^{12} \psi_s M_{s,t}}_{\text{hour & month dummies}}
-+ \varepsilon_{h,t}
-\end{align}
-
-where $x_{j,h,t}$ is either $ln X_{j,h,t}$ (Model 1 — log-levels) or $s_{j,h,t}=\frac{X_{j,h,t}}{Load_{h,t}}$ (Model 2 — shares).
-
-\begin{align}
-\ln \sigma^2_{h,t} = \; & \omega
-+ \underbrace{\alpha \ln \varepsilon^2_{h,t-1}}_{\text{log-ARCH(1)}}
-+ \underbrace{\delta \cdot \mathbf{1}(\varepsilon_{h,t-1} < 0) \cdot \ln \varepsilon^2_{h,t-1}}_{\text{asymmetry/leverage}} \nonumber \\
-& + \underbrace{\sum_{d=2}^{7} \lambda_d D_{d,t} 
-+ \sum_{s=2}^{12} \mu_s M_{s,t}}_{\text{hour \& month dummies in variance}}
-\end{align}
-
-where $1(\varepsilon_{h,t−1}<0)$ is an indicator function equal to 1 when the lagged error is negative. A significant $\delta$ indicates that negative shocks to price have a different effect on subsequent volatility than positive shocks of the same size.
-
-##### Levels as Exp. Vars. {.tabset}
-
-###### w.o. Indicators
-
-```{r, cache = TRUE,fig.height = 10, cache = FALSE}
-
-var_mat <- as.matrix(select(de_full, contains('hour'), 
-                                       contains('month')))
-
-de_mod_levs_arch <- arx(de_full$price_eur_m_whe, 
-              # Question: In theory, the ARCH(24) would proxy the seasonal (daily) AR term?
-              #arch = 1:24, 
-              ar = 1:7,
-              asym = 1,
-              arch = 1,
-              mxreg = lev_reg_mat, 
-              vxreg = var_mat)
-
-# model selection and plotting of residuals
-de_levs_sel <- getsm(de_mod_levs_arch, ar.LjungB = NULL, arch.LjungB = NULL)
-de_levs_sel %>% plot
-
-```
-
-
-###### w. Indicators
-
-```{r, cache = TRUE,fig.height = 10, cache = FALSE}
-
-var_mat_inds <- as.matrix(select(de_full, "covid_ind", "ukraine_ind", #"iran_ind", 
-                            contains('hour'), 
-                                       contains('month')))
-
-de_mod_levs_arch_inds <- arx(de_full$price_eur_m_whe, 
-              # Question: In theory, the ARCH(24) would proxy the seasonal (daily) AR term?
-              #arch = 1:24, 
-              ar = 1:7,
-              asym = 1,
-              arch = 1,
-              mxreg = lev_reg_mat_inds, 
-              vxreg = var_mat_inds)
-
-# model selection and plotting of residuals
-de_levs_sel_inds <- getsm(de_mod_levs_arch_inds, ar.LjungB = NULL, arch.LjungB = NULL)
-de_levs_sel_inds %>% plot
-
-```
-
-##### Shares as Exp. Vars. {.tabset}
-
-###### w.o. Indicators
-
-```{r, cache = TRUE,fig.height = 10, cache = FALSE}
-
-de_mod_shares_arch <- arx(de_full$price_eur_m_whe, 
-              # Question: In theory, the ARCH(24) would proxy the seasonal (daily) AR term?
-              #arch = 1:24, 
-              ar = 1:7,
-              asym = 1,
-              arch = 1,
-              mxreg = reg_mat_shares,
-              vxreg = var_mat)
-
-# model selection and plotting of residuals
-de_shares_sel <- getsm(de_mod_shares_arch, ar.LjungB = NULL, arch.LjungB = NULL)
-de_shares_sel %>% plot
-
-```
-
-###### w. Indicators
-
-```{r, cache = TRUE,fig.height = 10, cache = FALSE}
-
-de_mod_shares_arch_inds <- arx(de_full$price_eur_m_whe, 
+esc_de_mod_shares_arch_inds <- arx(de_full$price_eur_m_whe, 
               # Question: In theory, the ARCH(24) would proxy the seasonal (daily) AR term?
               #arch = 1:24, 
               ar = 1:7,
@@ -1090,11 +1080,10 @@ de_mod_shares_arch_inds <- arx(de_full$price_eur_m_whe,
               vxreg = var_mat_inds)
 
 # model selection and plotting of residuals
-de_shares_sel_inds <- getsm(de_mod_shares_arch_inds, ar.LjungB = NULL, arch.LjungB = NULL)
-de_shares_sel_inds %>% plot
+esc_de_shares_sel_inds <- getsm(esc_de_mod_shares_arch_inds, ar.LjungB = NULL, arch.LjungB = NULL)
+esc_de_shares_sel_inds %>% plot
 
 ```
-
 
 
 ## (TBA) Spotlight on UK, Germany, Denmark
